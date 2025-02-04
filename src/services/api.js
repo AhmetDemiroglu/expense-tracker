@@ -129,9 +129,22 @@ export const expenseAPI = {
   },
 
   // Harcama sil
-  async deleteExpense(year, month, id) {
-    const expenseRef = ref(db, `expenses/${year}/${month}/${id}`)
-    return await remove(expenseRef)
+  async deleteExpense(year, month, expenseId) {
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !expenseId) {
+      throw new Error('Geçersiz silme parametreleri')
+    }
+  
+    try {
+      const path = `expenses/${year}/${month}/${expenseId}`
+    
+      const expenseRef = ref(db, path)
+      await remove(expenseRef)
+      
+      return true
+    } catch (error) {
+      console.error('Firebase silme hatası:', error)
+      throw error
+    }
   },
 
   // Gelir metodları

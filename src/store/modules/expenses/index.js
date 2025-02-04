@@ -34,7 +34,6 @@ export default {
     async fetchExpenses({ commit }, { year, month }) {
       try {
         const expenses = await expenseAPI.getExpenses(year, month)
-        console.log('Fetched expenses from API:', expenses)
         commit('SET_EXPENSES', expenses)
         return expenses
       } catch (error) {
@@ -61,10 +60,15 @@ export default {
         throw error
       }
     },
-    async deleteExpense({ commit }, id) {
+    async deleteExpense({ commit }, { year, month, expenseId }) {
       try {
-        await expenseAPI.deleteExpense(id)
-        commit('DELETE_EXPENSE', id)
+        if (!year || !Number.isInteger(month) || !expenseId) {
+          throw new Error('Geçersiz silme parametreleri')
+        }
+        
+        await expenseAPI.deleteExpense(year, month, expenseId)
+        commit('DELETE_EXPENSE', expenseId)
+        return true
       } catch (error) {
         commit('SET_ERROR', error.message)
         throw error

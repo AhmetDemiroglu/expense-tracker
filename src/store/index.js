@@ -1,5 +1,5 @@
 import { createStore } from 'vuex'
-import expenses from './modules/expenses'
+import expenses from './modules/expenses/index'
 import income from './modules/income'
 import debts from './modules/debts'
 import bills from './modules/bills'

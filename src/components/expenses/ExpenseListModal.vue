@@ -2,34 +2,38 @@
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>{{ formatDate }} Harcamaları</h2>
+        <h2>{{ formatDate(date) }} Harcamaları</h2>
         <button class="close-btn" @click="$emit('close')">
           <i class="fas fa-times"></i>
         </button>
       </div>
 
-      <div class="expenses-list">
+      <div class="modal-body">
         <div v-if="expenses.length === 0" class="no-expenses">
-          Bu güne ait harcama bulunmuyor.
+          Bu tarihte harcama bulunmuyor.
         </div>
-        
-        <div v-else class="expense-items">
+
+        <div v-else class="expense-list">
           <div v-for="expense in expenses" :key="expense.id" class="expense-item">
-            <div class="expense-info">
+            <div class="expense-details">
               <span class="expense-description">{{ expense.description }}</span>
               <span class="expense-amount">{{ formatCurrency(expense.amount) }}</span>
             </div>
-            <button class="delete-btn" @click="deleteExpense(expense.id)" title="Sil">
-              <i class="fas fa-trash-alt"></i>
-            </button>
+            <div class="expense-actions">
+              <button class="delete-btn" @click="$emit('delete-expense', expense.id)">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
           </div>
+        </div>
+
+        <div class="expense-summary">
+          <span class="label">Toplam:</span>
+          <span class="amount">{{ formatCurrency(totalAmount) }}</span>
         </div>
       </div>
 
       <div class="modal-footer">
-        <div class="total">
-          Toplam: <span>{{ formatCurrency(totalAmount) }}</span>
-        </div>
         <button class="add-btn" @click="$emit('add-expense')">
           <i class="fas fa-plus"></i>
           Yeni Harcama Ekle
@@ -40,7 +44,7 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useStore } from 'vuex'
 
 export default {
@@ -55,16 +59,17 @@ export default {
       required: true
     }
   },
+  emits: ['close', 'add-expense', 'delete-expense'],
   setup(props) {
     const store = useStore()
 
-    const formatDate = computed(() => {
+    const formatDate = (date) => {
       return new Intl.DateTimeFormat('tr-TR', {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
-      }).format(props.date)
-    })
+      }).format(date)
+    }
 
     const totalAmount = computed(() => {
       return props.expenses.reduce((sum, expense) => sum + expense.amount, 0)
@@ -77,21 +82,10 @@ export default {
       }).format(amount)
     }
 
-    const deleteExpense = async (id) => {
-      if (confirm('Bu harcamayı silmek istediğinizden emin misiniz?')) {
-        try {
-          await store.dispatch('expenses/deleteExpense', id)
-        } catch (error) {
-          console.error('Harcama silinemedi:', error)
-        }
-      }
-    }
-
     return {
       formatDate,
       totalAmount,
       formatCurrency,
-      deleteExpense
     }
   }
 }
@@ -149,7 +143,7 @@ export default {
   color: #003B5C;
 }
 
-.expenses-list {
+.modal-body {
   padding: 1.5rem;
   overflow-y: auto;
   flex: 1;
@@ -161,7 +155,7 @@ export default {
   padding: 2rem;
 }
 
-.expense-items {
+.expense-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -171,12 +165,11 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  background: #f8f9fa;
-  border-radius: 8px;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.expense-info {
+.expense-details {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -194,19 +187,36 @@ export default {
   font-weight: 600;
 }
 
+.expense-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .delete-btn {
-  background: none;
+  padding: 0.25rem;
   border: none;
+  background: none;
   color: #dc3545;
   cursor: pointer;
-  padding: 0.5rem;
-  opacity: 0.7;
   transition: all 0.2s ease;
 }
 
 .delete-btn:hover {
-  opacity: 1;
   transform: scale(1.1);
+  color: #bd2130;
+}
+
+.expense-summary {
+  padding: 1.5rem;
+  border-top: 1px solid rgba(0, 59, 92, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label {
+  color: #003B5C;
+  font-weight: 500;
 }
 
 .modal-footer {
@@ -215,17 +225,6 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.total {
-  color: #003B5C;
-  font-weight: 500;
-}
-
-.total span {
-  color: #009B9F;
-  font-weight: 600;
-  margin-left: 0.5rem;
 }
 
 .add-btn {

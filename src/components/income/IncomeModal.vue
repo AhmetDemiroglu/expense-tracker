@@ -57,32 +57,52 @@
 
         <div class="form-summary">
           <span class="label">Toplam Gelir:</span>
-          <span class="amount">{{ formatCurrency(totalIncome) }}</span>
+          <span class="amount positive">{{ formatCurrency(totalIncome) }}</span>
         </div>
 
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="$emit('close')">
-            <i class="fas fa-times"></i>
-            İptal
+          <button type="button" class="clear-btn" @click="clearForm">
+            <i class="fas fa-trash"></i>
+            Temizle
           </button>
-          <button type="submit" class="save-btn">
-            <i class="fas fa-check"></i>
-            Kaydet
-          </button>
+          <div class="action-buttons">
+            <button type="button" class="cancel-btn" @click="$emit('close')">
+              <i class="fas fa-times"></i>
+              İptal
+            </button>
+            <button type="submit" class="save-btn">
+              <i class="fas fa-check"></i>
+              Kaydet
+            </button>
+          </div>
         </div>
       </form>
+
+      <!-- Güncelleme Onay Modalı -->
+      <ConfirmModalEdit
+        v-if="showConfirmUpdate"
+        title="Gelirleri Güncelle"
+        message="Gelir bilgilerini güncellemek istediğinizden emin misiniz?"
+        @confirm="confirmUpdate"
+        @cancel="showConfirmUpdate = false"
+      />
     </div>
   </div>
 </template>
 
 <script>
 import '@/assets/styles/modal.css'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { expenseAPI } from '@/services/api'
+import ConfirmModalEdit from '../shared/ConfirmModalEdit.vue'
 
 export default {
   name: 'IncomeModal',
+  components: {
+    ConfirmModalEdit
+  },
+  emits: ['close'],
   setup(props, { emit }) {
     const store = useStore()
     const form = ref({
@@ -90,6 +110,8 @@ export default {
       rent: 0,
       other: 0
     })
+    const initialForm = ref({}) // Başlangıç değerlerini saklamak için
+    const showConfirmUpdate = ref(false)
 
     const totalIncome = computed(() => {
       return Object.values(form.value).reduce((sum, val) => sum + Number(val), 0)
@@ -102,7 +124,19 @@ export default {
       }).format(amount)
     }
 
+    const isFormChanged = () => {
+      return JSON.stringify(form.value) !== JSON.stringify(initialForm.value)
+    }
+
     const handleSubmit = async () => {
+      if (isFormChanged()) {
+        showConfirmUpdate.value = true
+      } else {
+        emit('close')
+      }
+    }
+
+    const confirmUpdate = async () => {
       try {
         for (const [type, amount] of Object.entries(form.value)) {
           await store.dispatch('income/updateIncome', {
@@ -112,21 +146,109 @@ export default {
             amount: Number(amount)
           })
         }
+        showConfirmUpdate.value = false
         emit('close')
       } catch (error) {
         console.error('Gelir güncellenemedi:', error)
       }
     }
 
+    const clearForm = () => {
+      form.value = {
+        salary: 0,
+        rent: 0,
+        other: 0
+      }
+    }
+
+    // Mevcut gelir bilgilerini yükle
+    onMounted(async () => {
+      try {
+        const income = await expenseAPI.getMonthlyIncome(
+          store.state.selectedYear,
+          store.state.selectedMonth
+        )
+        
+        // Eğer veriler varsa formu güncelle
+        if (income) {
+          const formData = {
+            salary: Number(income.salary) || 0,
+            rent: Number(income.rent) || 0,
+            other: Number(income.other) || 0
+          }
+          form.value = { ...formData }
+          initialForm.value = { ...formData } // Başlangıç değerlerini sakla
+        }
+      } catch (error) {
+        console.error('Gelir bilgileri yüklenemedi:', error)
+      }
+    })
+
     return {
       form,
       totalIncome,
       formatCurrency,
-      handleSubmit
+      handleSubmit,
+      clearForm,
+      showConfirmUpdate,
+      confirmUpdate
     }
   }
 }
 </script>
 
 <style scoped>
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #f8f9fa;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+
+.clear-btn:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.amount.positive {
+  color: #00B2A9;
+}
+
+@media (max-width: 768px) {
+  .form-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+
+  .clear-btn,
+  .cancel-btn,
+  .save-btn {
+    flex: 1;
+  }
+}
 </style> 

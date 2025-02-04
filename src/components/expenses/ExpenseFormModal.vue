@@ -2,13 +2,24 @@
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>{{ formatDate }} - Yeni Harcama</h2>
+        <h2>{{ formatDate(date) }} - Yeni Harcama</h2>
         <button class="close-btn" @click="$emit('close')">
           <i class="fas fa-times"></i>
         </button>
       </div>
 
       <form @submit.prevent="handleSubmit" class="expense-form">
+        <div class="form-group">
+          <label for="description">Açıklama</label>
+          <input
+            type="text"
+            id="description"
+            v-model="form.description"
+            required
+            placeholder="Harcama açıklaması"
+          />
+        </div>
+
         <div class="form-group">
           <label for="amount">Tutar (TL)</label>
           <div class="amount-input">
@@ -25,23 +36,12 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="description">Harcama Nedeni</label>
-          <input
-            type="text"
-            id="description"
-            v-model="form.description"
-            required
-            placeholder="Örn: Market alışverişi"
-          />
-        </div>
-
         <div class="form-actions">
           <button type="button" class="cancel-btn" @click="$emit('close')">
             <i class="fas fa-times"></i>
             İptal
           </button>
-          <button type="submit" class="save-btn" :disabled="!isValid">
+          <button type="submit" class="save-btn">
             <i class="fas fa-check"></i>
             Kaydet
           </button>
@@ -52,7 +52,7 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 export default {
   name: 'ExpenseFormModal',
@@ -64,36 +64,29 @@ export default {
   },
   setup(props, { emit }) {
     const form = ref({
-      amount: '',
-      description: ''
+      description: '',
+      amount: ''
     })
 
-    const formatDate = computed(() => {
+    const handleSubmit = () => {
+      emit('save', {
+        description: form.value.description,
+        amount: Number(form.value.amount)
+      })
+    }
+
+    const formatDate = (date) => {
       return new Intl.DateTimeFormat('tr-TR', {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
-      }).format(props.date)
-    })
-
-    const isValid = computed(() => {
-      return form.value.amount > 0 && form.value.description.trim().length > 0
-    })
-
-    const handleSubmit = () => {
-      if (!isValid.value) return
-
-      emit('save', {
-        amount: parseFloat(form.value.amount),
-        description: form.value.description.trim()
-      })
+      }).format(date)
     }
 
     return {
       form,
-      formatDate,
-      isValid,
-      handleSubmit
+      handleSubmit,
+      formatDate
     }
   }
 }

@@ -38,16 +38,31 @@
         </div>
 
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="$emit('close')">
-            <i class="fas fa-times"></i>
-            İptal
+          <button type="button" class="clear-btn" @click="clearForm">
+            <i class="fas fa-trash"></i>
+            Temizle
           </button>
-          <button type="submit" class="save-btn">
-            <i class="fas fa-check"></i>
-            Kaydet
-          </button>
+          <div class="action-buttons">
+            <button type="button" class="cancel-btn" @click="$emit('close')">
+              <i class="fas fa-times"></i>
+              İptal
+            </button>
+            <button type="submit" class="save-btn">
+              <i class="fas fa-check"></i>
+              Kaydet
+            </button>
+          </div>
         </div>
       </form>
+
+      <!-- Güncelleme Onay Modalı -->
+      <ConfirmModalEdit
+        v-if="showConfirmUpdate"
+        title="Birikim Hedefini Güncelle"
+        message="Birikim hedefini güncellemek istediğinizden emin misiniz?"
+        @confirm="confirmUpdate"
+        @cancel="showConfirmUpdate = false"
+      />
     </div>
   </div>
 </template>
@@ -57,12 +72,19 @@ import '@/assets/styles/modal.css'
 import { ref, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { expenseAPI } from '@/services/api'
+import ConfirmModalEdit from '../shared/ConfirmModalEdit.vue'
 
 export default {
   name: 'SavingsModal',
+  components: {
+    ConfirmModalEdit
+  },
+  emits: ['close'],
   setup(props, { emit }) {
     const store = useStore()
     const amount = ref(0)
+    const initialAmount = ref(0) // Başlangıç değerini saklamak için
+    const showConfirmUpdate = ref(false)
 
     const formatCurrency = (value) => {
       return new Intl.NumberFormat('tr-TR', {
@@ -71,43 +93,67 @@ export default {
       }).format(value)
     }
 
+    const isAmountChanged = () => {
+      return Number(amount.value) !== Number(initialAmount.value)
+    }
+
     const handleSubmit = async () => {
+      if (isAmountChanged()) {
+        showConfirmUpdate.value = true
+      } else {
+        emit('close')
+      }
+    }
+
+    const confirmUpdate = async () => {
       try {
         await store.dispatch('savings/updateSavings', {
           year: store.state.selectedYear,
           month: store.state.selectedMonth,
           amount: Number(amount.value)
         })
+        showConfirmUpdate.value = false
         emit('close')
       } catch (error) {
         console.error('Birikim hedefi güncellenemedi:', error)
       }
     }
 
+    const clearForm = () => {
+      amount.value = 0
+    }
+
     // Mevcut birikim hedefini yükle
     onMounted(async () => {
       try {
-        const savings = await store.dispatch('savings/fetchMonthlySavings', {
-          year: store.state.selectedYear,
-          month: store.state.selectedMonth
-        })
-        amount.value = savings
+        const savings = await expenseAPI.getMonthlySavings(
+          store.state.selectedYear,
+          store.state.selectedMonth
+        )
+        
+        // Eğer veri varsa formu güncelle
+        if (savings !== null && savings !== undefined) {
+          amount.value = Number(savings) || 0
+          initialAmount.value = Number(savings) || 0 // Başlangıç değerini sakla
+        }
       } catch (error) {
-        console.error('Birikim hedefi yüklenemedi:', error)
+        console.error('Birikim bilgileri yüklenemedi:', error)
       }
     })
 
     return {
       amount,
       formatCurrency,
-      handleSubmit
+      handleSubmit,
+      clearForm,
+      showConfirmUpdate,
+      confirmUpdate
     }
   }
 }
 </script>
 
 <style scoped>
-/* Sadece özel stiller kalacak, diğerleri modal.css'ten gelecek */
 .savings-info {
   margin: 2rem 0;
   padding: 1rem;
@@ -139,5 +185,53 @@ export default {
   line-height: 1.5;
 }
 
-/* Diğer tüm stiller silinecek çünkü modal.css'te var */
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #f8f9fa;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+
+.clear-btn:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .form-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+
+  .clear-btn,
+  .cancel-btn,
+  .save-btn {
+    flex: 1;
+  }
+}
 </style> 

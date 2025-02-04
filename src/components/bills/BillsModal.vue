@@ -132,20 +132,35 @@
 
         <div class="form-summary">
           <span class="label">Toplam Fatura:</span>
-          <span class="amount">{{ formatCurrency(totalBills) }}</span>
+          <span class="amount negative">{{ formatCurrency(totalBills) }}</span>
         </div>
 
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="$emit('close')">
-            <i class="fas fa-times"></i>
-            İptal
+          <button type="button" class="clear-btn" @click="clearForm">
+            <i class="fas fa-trash"></i>
+            Temizle
           </button>
-          <button type="submit" class="save-btn">
-            <i class="fas fa-check"></i>
-            Kaydet
-          </button>
+          <div class="action-buttons">
+            <button type="button" class="cancel-btn" @click="$emit('close')">
+              <i class="fas fa-times"></i>
+              İptal
+            </button>
+            <button type="submit" class="save-btn">
+              <i class="fas fa-check"></i>
+              Kaydet
+            </button>
+          </div>
         </div>
       </form>
+
+      <!-- Güncelleme Onay Modalı -->
+      <ConfirmModalEdit
+        v-if="showConfirmUpdate"
+        title="Faturaları Güncelle"
+        message="Fatura bilgilerini güncellemek istediğinizden emin misiniz?"
+        @confirm="confirmUpdate"
+        @cancel="showConfirmUpdate = false"
+      />
     </div>
   </div>
 </template>
@@ -155,9 +170,14 @@ import '@/assets/styles/modal.css'
 import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { expenseAPI } from '@/services/api'
+import ConfirmModalEdit from '../shared/ConfirmModalEdit.vue'
 
 export default {
   name: 'BillsModal',
+  components: {
+    ConfirmModalEdit
+  },
+  emits: ['close'],
   setup(props, { emit }) {
     const store = useStore()
     const form = ref({
@@ -170,6 +190,8 @@ export default {
       pool: 0,
       other: 0
     })
+    const initialForm = ref({}) // Başlangıç değerlerini saklamak için
+    const showConfirmUpdate = ref(false)
 
     const totalBills = computed(() => {
       return Object.values(form.value).reduce((sum, val) => sum + Number(val), 0)
@@ -182,7 +204,19 @@ export default {
       }).format(amount)
     }
 
+    const isFormChanged = () => {
+      return JSON.stringify(form.value) !== JSON.stringify(initialForm.value)
+    }
+
     const handleSubmit = async () => {
+      if (isFormChanged()) {
+        showConfirmUpdate.value = true
+      } else {
+        emit('close')
+      }
+    }
+
+    const confirmUpdate = async () => {
       try {
         for (const [type, amount] of Object.entries(form.value)) {
           await store.dispatch('bills/updateBill', {
@@ -192,22 +226,51 @@ export default {
             amount: Number(amount)
           })
         }
+        showConfirmUpdate.value = false
         emit('close')
       } catch (error) {
         console.error('Faturalar güncellenemedi:', error)
       }
     }
 
+    const clearForm = () => {
+      form.value = {
+        phone: 0,
+        internet: 0,
+        water: 0,
+        maintenance: 0,
+        naturalGas: 0,
+        electricity: 0,
+        pool: 0,
+        other: 0
+      }
+    }
+
     // Mevcut fatura bilgilerini yükle
     onMounted(async () => {
       try {
-        const bills = await store.dispatch('bills/fetchMonthlyBills', {
-          year: store.state.selectedYear,
-          month: store.state.selectedMonth
-        })
-        form.value = { ...bills }
+        const bills = await expenseAPI.getMonthlyBills(
+          store.state.selectedYear,
+          store.state.selectedMonth
+        )
+        
+        // Eğer veriler varsa formu güncelle
+        if (bills) {
+          const formData = {
+            phone: Number(bills.phone) || 0,
+            internet: Number(bills.internet) || 0,
+            water: Number(bills.water) || 0,
+            maintenance: Number(bills.maintenance) || 0,
+            naturalGas: Number(bills.naturalGas) || 0,
+            electricity: Number(bills.electricity) || 0,
+            pool: Number(bills.pool) || 0,
+            other: Number(bills.other) || 0
+          }
+          form.value = { ...formData }
+          initialForm.value = { ...formData } // Başlangıç değerlerini sakla
+        }
       } catch (error) {
-        console.error('Faturalar yüklenemedi:', error)
+        console.error('Fatura bilgileri yüklenemedi:', error)
       }
     })
 
@@ -215,18 +278,78 @@ export default {
       form,
       totalBills,
       formatCurrency,
-      handleSubmit
+      handleSubmit,
+      clearForm,
+      showConfirmUpdate,
+      confirmUpdate
     }
   }
 }
 </script>
 
 <style scoped>
-/* Sadece özel stiller kalacak, diğerleri modal.css'ten gelecek */
 .bills-form {
   max-height: 70vh;
   overflow-y: auto;
+  padding-right: 1rem;
 }
 
-/* Diğer tüm stiller silinecek çünkü modal.css'te var */
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  position: sticky;
+  bottom: 0;
+  background: white;
+  padding: 1rem 0;
+  border-top: 1px solid rgba(0, 59, 92, 0.1);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #f8f9fa;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+
+.clear-btn:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.amount.negative {
+  color: #dc3545;
+}
+
+@media (max-width: 768px) {
+  .form-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+
+  .clear-btn,
+  .cancel-btn,
+  .save-btn {
+    flex: 1;
+  }
+}
 </style> 

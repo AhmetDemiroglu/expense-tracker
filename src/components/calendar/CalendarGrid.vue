@@ -1,7 +1,20 @@
 <template>
   <div class="calendar-container">
     <div class="grid-header-container">
-      <h1>{{ monthName }} {{ year }}</h1>
+      <div class="month-title">
+        <div class="month-navigation">
+          <button class="nav-btn" @click="navigateMonth(-1)" title="Önceki Ay">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <div class="month-text">
+            <i class="far fa-calendar-alt"></i>
+            <h1>{{ monthName }} {{ year }}</h1>
+          </div>
+          <button class="nav-btn" @click="navigateMonth(1)" title="Sonraki Ay">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
       <router-link to="/" class="back-btn">
         <i class="fas fa-arrow-left"></i>
         Özete Dön
@@ -9,59 +22,69 @@
     </div>
     
     <div class="month-actions">
-      <div class="action-section">
+      <div class="action-buttons-container">
         <div class="action-buttons">
           <button class="action-btn income-btn" @click="openIncomeModal">
-            <i class="fas fa-money-bill-wave"></i>
-            <span>Gelir Ekle</span>
+            <i class="fas fa-money-bill"></i>
+            Gelir Ekle
           </button>
           
           <button class="action-btn debts-btn" @click="openDebtsModal">
             <i class="fas fa-credit-card"></i>
-            <span>Borçlar</span>
+            Borçlar
           </button>
           
           <button class="action-btn bills-btn" @click="openBillsModal">
             <i class="fas fa-file-invoice"></i>
-            <span>Faturalar</span>
+            Faturalar
           </button>
           
           <button class="action-btn savings-btn" @click="openSavingsModal">
             <i class="fas fa-piggy-bank"></i>
-            <span>Birikim</span>
+            Birikim
           </button>
         </div>
+        <div class="export-buttons">
+          <button class="export-btn" @click="exportToPDF" title="PDF olarak indir">
+            <i class="fas fa-file-pdf"></i>
+            PDF
+          </button>
+          <button class="export-btn" @click="printCalendar" title="Takvimi yazdır">
+            <i class="fas fa-print"></i>
+            Yazdır
+          </button>
+        </div>
+      </div>
 
-        <div class="period-settings">
-          <div class="date-setting">
-            <span class="setting-label">Dönem Başlangıcı:</span>
-            <div class="date-input" v-if="!isEditingPeriod" @click="startEditingPeriod">
-              {{ formatPeriodDate(monthData.periodStartDate) }}
-              <i class="fas fa-pencil-alt"></i>
-            </div>
-            <input
-              v-else
-              type="date"
-              v-model="periodStartInput"
-              @blur="savePeriodDate"
-              @keyup.enter="savePeriodDate"
-            />
+      <div class="period-settings">
+        <div class="date-setting">
+          <span class="setting-label">Dönem Başlangıcı:</span>
+          <div class="date-input" v-if="!isEditingPeriod" @click="startEditingPeriod">
+            {{ formatPeriodDate(monthData.periodStartDate) }}
+            <i class="fas fa-pencil-alt"></i>
           </div>
+          <input
+            v-else
+            type="date"
+            v-model="periodStartInput"
+            @blur="savePeriodDate"
+            @keyup.enter="savePeriodDate"
+          />
+        </div>
 
-          <div class="date-setting">
-            <span class="setting-label">Hesap Kesim:</span>
-            <div class="date-input" v-if="!isEditingCutoff" @click="startEditingCutoff">
-              {{ formatPeriodDate(monthData.cutoffDate) }}
-              <i class="fas fa-pencil-alt"></i>
-            </div>
-            <input
-              v-else
-              type="date"
-              v-model="cutoffDateInput"
-              @blur="saveCutoffDate"
-              @keyup.enter="saveCutoffDate"
-            />
+        <div class="date-setting">
+          <span class="setting-label">Hesap Kesim:</span>
+          <div class="date-input" v-if="!isEditingCutoff" @click="startEditingCutoff">
+            {{ formatPeriodDate(monthData.cutoffDate) }}
+            <i class="fas fa-pencil-alt"></i>
           </div>
+          <input
+            v-else
+            type="date"
+            v-model="cutoffDateInput"
+            @blur="saveCutoffDate"
+            @keyup.enter="saveCutoffDate"
+          />
         </div>
       </div>
 
@@ -107,7 +130,7 @@
           <div
             v-for="day in monthDays"
             :key="day.date"
-            class="day-cell"
+            class="grid-cell"
             :class="{
               'today': isToday(day.date),
               'cutoff-date': isCutoffDate(day.date),
@@ -116,21 +139,12 @@
               'period-inactive': !isInPeriod(day.date)
             }"
           >
-            <div class="day-header">
-              <span class="day-number">{{ day.date.getDate() }}</span>
-              <div class="day-indicators">
-                <span v-if="isCutoffDate(day.date)" class="indicator cutoff">
-                  Hesap Kesim
-                </span>
-                <span v-if="isPeriodStart(day.date)" class="indicator period-start">
-                  Dönem Başlangıcı
-                </span>
-              </div>
-            </div>
             <DayCell 
               :day="day"
               :monthData="monthData"
               :isInPeriod="isInPeriod(day.date)"
+              :isCutoffDate="isCutoffDate(day.date)"
+              :isPeriodStart="isPeriodStart(day.date)"
               @add-expense="openAddExpenseModal"
               @show-details="openDetailsModal"
             />
@@ -145,6 +159,7 @@
         :expenses="selectedDayExpenses"
         @close="closeDetailsModal"
         @add-expense="openAddExpenseModal"
+        @delete-expense="confirmDelete"
       />
 
       <!-- Yeni Harcama Modalı -->
@@ -153,6 +168,15 @@
         :date="selectedDate"
         @close="closeAddExpenseModal"
         @save="saveExpense"
+      />
+
+      <!-- Silme Onay Modalı -->
+      <ConfirmModal
+        v-if="showConfirmDelete"
+        title="Harcama Silinecek"
+        message="Bu harcamayı silmek istediğinizden emin misiniz?"
+        @confirm="handleDelete"
+        @cancel="showConfirmDelete = false"
       />
     </div>
 
@@ -169,8 +193,9 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useStore } from 'vuex'
+import { useRouter, useRoute } from 'vue-router'
 import DayCell from './DayCell.vue'
 import ExpenseListModal from '../expenses/ExpenseListModal.vue'
 import ExpenseFormModal from '../expenses/ExpenseFormModal.vue'
@@ -178,7 +203,9 @@ import IncomeModal from '../income/IncomeModal.vue'
 import DebtsModal from '../debts/DebtsModal.vue'
 import BillsModal from '../bills/BillsModal.vue'
 import SavingsModal from '../savings/SavingsModal.vue'
+import ConfirmModal from '../shared/ConfirmModal.vue'
 import { expenseAPI } from '../../services/api'
+import html2pdf from 'html2pdf.js/dist/html2pdf.bundle.min'
 
 export default {
   name: 'CalendarGrid',
@@ -189,7 +216,8 @@ export default {
     IncomeModal,
     DebtsModal,
     BillsModal,
-    SavingsModal
+    SavingsModal,
+    ConfirmModal
   },
   props: {
     year: {
@@ -203,10 +231,14 @@ export default {
   },
   setup(props) {
     const store = useStore()
+    const router = useRouter()
+    const route = useRoute()
     const weekDays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
     const showExpenseList = ref(false)
     const showExpenseForm = ref(false)
+    const showConfirmDelete = ref(false)
     const selectedDate = ref(null)
+    const selectedExpenseId = ref(null)
     const monthData = ref({
       cutoffDate: null,
       periodStartDate: null
@@ -309,33 +341,37 @@ export default {
     }
 
     // Seçili ayın harcamalarını yükle
-    onMounted(async () => {
-      await Promise.all([
-        store.dispatch('income/fetchMonthlyIncome', {
-          year: props.year,
-          month: props.month
-        }),
-        store.dispatch('debts/fetchMonthlyDebts', {
-          year: props.year,
-          month: props.month
-        }),
-        store.dispatch('bills/fetchMonthlyBills', {
-          year: props.year,
-          month: props.month
-        }),
-        store.dispatch('savings/fetchMonthlySavings', {
-          year: props.year,
-          month: props.month
-        }),
-        store.dispatch('expenses/fetchExpenses', {
-          year: props.year,
-          month: props.month
-        })
-      ])
-      store.commit('SET_SELECTED_YEAR', Number(props.year))
-      store.commit('SET_SELECTED_MONTH', Number(props.month))
+    const loadAllData = async () => {
       await fetchMonthData()
-    })
+      await store.dispatch('expenses/fetchExpenses', {
+        year: props.year,
+        month: props.month
+      })
+      await store.dispatch('income/fetchIncome', {
+        year: props.year,
+        month: props.month
+      })
+      await store.dispatch('bills/fetchBills', {
+        year: props.year,
+        month: props.month
+      })
+      await store.dispatch('debts/fetchDebts', {
+        year: props.year,
+        month: props.month
+      })
+      await store.dispatch('savings/fetchSavings', {
+        year: props.year,
+        month: props.month
+      })
+    }
+
+    // Route parametrelerini izle
+    watch(
+      () => [props.year, props.month],
+      () => {
+        loadAllData()
+      }
+    )
 
     // Modal state'leri
     const showIncomeModal = ref(false)
@@ -438,22 +474,18 @@ export default {
 
     // Modal açma/kapama metodları
     const openIncomeModal = () => { 
-      console.log('Opening income modal')
       showIncomeModal.value = true 
     }
     const closeIncomeModal = () => { showIncomeModal.value = false }
     const openDebtsModal = () => { 
-      console.log('Opening debts modal')
       showDebtsModal.value = true 
     }
     const closeDebtsModal = () => { showDebtsModal.value = false }
     const openBillsModal = () => { 
-      console.log('Opening bills modal')
       showBillsModal.value = true 
     }
     const closeBillsModal = () => { showBillsModal.value = false }
     const openSavingsModal = () => { 
-      console.log('Opening savings modal')
       showSavingsModal.value = true 
     }
     const closeSavingsModal = () => { showSavingsModal.value = false }
@@ -530,7 +562,244 @@ export default {
         .reduce((total, expense) => total + expense.amount, 0)
     })
 
+    // Silme işlemleri için yeni metodlar
+    const confirmDelete = (expenseId) => {
+      selectedExpenseId.value = expenseId
+      showConfirmDelete.value = true
+    }
+
+    const handleDelete = async () => {
+      try {
+        if (!selectedExpenseId.value) {
+          console.error('Silinecek harcama ID\'si bulunamadı')
+          return
+        }
+
+        const expense = store.state.expenses.expenses.find(e => e.id === selectedExpenseId.value)
+        if (!expense) {
+          console.error('Silinecek harcama bulunamadı')
+          return
+        }
+
+        const expenseDate = new Date(Number(expense.date))
+        
+        await store.dispatch('expenses/deleteExpense', {
+          year: expenseDate.getFullYear(),
+          month: expenseDate.getMonth(),
+          expenseId: selectedExpenseId.value
+        })
+
+        showConfirmDelete.value = false
+        selectedExpenseId.value = null
+        
+        // Harcama listesini güncelle
+        if (selectedDate.value) {
+          const updatedExpenses = store.state.expenses.expenses.filter(e => 
+            new Date(e.date).toDateString() === selectedDate.value.toDateString()
+          )
+          
+          if (updatedExpenses.length === 0) {
+            closeDetailsModal()
+          }
+        }
+      } catch (error) {
+        console.error('Harcama silinirken hata oluştu:', error)
+      }
+    }
+
+    const exportToPDF = () => {
+      const element = document.querySelector('.calendar-grid')
+      
+      // PDF için özel stil ekleyelim
+      const originalStyle = element.style.cssText
+      element.style.fontSize = '7px'
+      element.style.padding = '0.3rem'
+      
+      // Grid hücrelerinin yüksekliğini azaltalım
+      const cells = element.querySelectorAll('.grid-cell')
+      const originalCellStyles = []
+      cells.forEach(cell => {
+        originalCellStyles.push(cell.style.cssText)
+        cell.style.minHeight = '60px'
+        cell.style.padding = '0.2rem'
+      })
+
+      const opt = {
+        margin: 0.2,
+        filename: `takvim-${props.year}-${props.month}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          width: 1200, // Yatay format için genişliği artırdık
+          height: 800 // Yatay format için yüksekliği artırdık
+        },
+        jsPDF: { 
+          unit: 'in', 
+          format: 'a4', 
+          orientation: 'landscape', // Yatay format
+          compress: true
+        }
+      }
+      
+      html2pdf()
+        .set(opt)
+        .from(element)
+        .save()
+        .then(() => {
+          // Orijinal stilleri geri yükleyelim
+          element.style.cssText = originalStyle
+          cells.forEach((cell, index) => {
+            cell.style.cssText = originalCellStyles[index]
+          })
+        })
+    }
+
+    const printCalendar = () => {
+      const printContent = document.querySelector('.calendar-grid')
+      const WinPrint = window.open('', '', 'width=900,height=650')
+      
+      WinPrint.document.write(`
+        <html>
+          <head>
+            <title>Takvim</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+              
+              body {
+                font-family: 'Inter', sans-serif;
+                margin: 0;
+                padding: 20px;
+              }
+
+              .calendar-grid {
+                background: white;
+                border-radius: 16px;
+                padding: 1.5rem;
+                width: 100%;
+              }
+
+              .grid-header {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                gap: 0.5rem;
+                margin-bottom: 1rem;
+              }
+
+              .grid-body {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                gap: 0.5rem;
+              }
+
+              .grid-cell {
+                min-height: 120px;
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 0.5rem;
+              }
+
+              .day-number {
+                font-weight: 500;
+                color: #003B5C;
+              }
+
+              .expense-summary {
+                text-align: right;
+                margin-top: auto;
+              }
+
+              .total-expense {
+                font-weight: 500;
+                color: #003B5C;
+              }
+
+              .remaining-limit {
+                font-size: 0.9rem;
+              }
+
+              .remaining-limit.positive {
+                color: #00B2A9;
+              }
+
+              .remaining-limit.negative {
+                color: #dc3545;
+              }
+
+              .day-actions {
+                display: none;
+              }
+
+              .budget-warning,
+              .no-expense-info,
+              .budget-safe {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.5rem;
+                border-radius: 4px;
+                margin-top: 0.5rem;
+                font-size: 0.8rem;
+              }
+
+              .budget-warning {
+                background-color: rgba(220, 53, 69, 0.1);
+                color: #dc3545;
+              }
+
+              .no-expense-info {
+                background-color: rgba(40, 167, 69, 0.15);
+                color: #28a745;
+              }
+
+              .budget-safe {
+                background-color: rgba(255, 152, 0, 0.15);
+                color: #ff9800;
+              }
+
+              @media print {
+                body {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            ${printContent.outerHTML}
+          </body>
+        </html>
+      `)
+      
+      WinPrint.document.close()
+      WinPrint.focus()
+
+      // Fontların ve stillerin yüklenmesi için biraz daha bekleyelim
+      setTimeout(() => {
+        WinPrint.print()
+        WinPrint.close()
+      }, 1500)
+    }
+
+    const navigateMonth = (direction) => {
+      let newMonth = parseInt(props.month) + direction
+      let newYear = parseInt(props.year)
+
+      if (newMonth > 11) {
+        newMonth = 0
+        newYear++
+      } else if (newMonth < 0) {
+        newMonth = 11
+        newYear--
+      }
+
+      router.push(`/month/${newYear}/${newMonth}`)
+    }
+
     onMounted(() => {
+      loadAllData()
       // Touch ve drag olayları için
       const gridWrapper = document.querySelector('.grid-body-wrapper')
       if (gridWrapper) {
@@ -607,7 +876,14 @@ export default {
       startEditingPeriod,
       savePeriodDate,
       formatPeriodDate,
-      totalPeriodExpenses
+      totalPeriodExpenses,
+      showConfirmDelete,
+      selectedExpenseId,
+      confirmDelete,
+      handleDelete,
+      exportToPDF,
+      printCalendar,
+      navigateMonth
     }
   }
 }
@@ -627,9 +903,51 @@ export default {
   margin-bottom: 2rem;
 }
 
-.grid-header-container h1 {
+.month-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.month-navigation {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.month-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: #003B5C;
-  margin: 0;
+}
+
+.month-text i {
+  color: #009B9F;
+  font-size: 1.8rem;
+  margin-right: 0.5rem;
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: #009B9F;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-btn:hover {
+  background-color: rgba(0, 155, 159, 0.1);
+  transform: scale(1.1);
+}
+
+.nav-btn i {
+  font-size: 1.2rem;
 }
 
 .back-btn {
@@ -657,12 +975,13 @@ export default {
   margin-top: 2rem;
   position: relative;
   width: 100%;
+  overflow: hidden;
 }
 
 .grid-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 1rem;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
@@ -673,16 +992,16 @@ export default {
 }
 
 .grid-body-wrapper {
-  overflow-x: auto;
+  overflow: hidden;
   -webkit-overflow-scrolling: touch;
-  margin: 0 -1.5rem;
-  padding: 0 1.5rem;
 }
 
 .grid-body {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 0.5rem;
+  width: 100%;
+  grid-auto-rows: 1fr;
 }
 
 .month-actions {
@@ -691,15 +1010,28 @@ export default {
   border-radius: 16px;
   padding: 1.5rem;
   box-shadow: 0 4px 12px rgba(0, 59, 92, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.action-buttons-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
 }
 
 .action-buttons {
   display: flex;
   gap: 1rem;
-  margin-bottom: 1.5rem;
 }
 
-.action-btn {
+.export-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.export-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -709,26 +1041,14 @@ export default {
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  background-color: #f8f9fa;
+  color: #6c757d;
+  border: 1px solid #dee2e6;
 }
 
-.income-btn {
-  background-color: #00B2A9;
-  color: white;
-}
-
-.debts-btn {
-  background-color: #dc3545;
-  color: white;
-}
-
-.bills-btn {
-  background-color: #003B5C;
-  color: white;
-}
-
-.savings-btn {
-  background-color: #ffc107;
-  color: #000;
+.export-btn:hover {
+  background-color: #e9ecef;
+  color: #495057;
 }
 
 .month-summary {
@@ -774,27 +1094,90 @@ export default {
   margin: 0.5rem 0;
 }
 
+.period-settings {
+  display: flex;
+  gap: 2rem;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.date-setting {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.setting-label {
+  color: #666;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.date-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-input:hover {
+  background: #e9ecef;
+}
+
+.date-input i {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 768px) {
   .calendar-container {
-    padding: 1rem;
+    padding: 0.5rem;
+  }
+
+  .action-buttons-container {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .action-buttons,
+  .export-buttons {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .action-btn,
+  .export-btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 120px;
+    padding: 0.5rem;
+    font-size: 0.9rem;
+    justify-content: center;
+  }
+
+  .export-buttons {
+    justify-content: stretch;
+  }
+
+  .export-btn {
+    margin: 0;
+  }
+
+  .grid-header,
+  .grid-body {
+    gap: 0.25rem;
   }
 
   .grid-header-container {
     flex-direction: column;
     gap: 1rem;
     align-items: flex-start;
-  }
-
-  .action-buttons {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .action-btn {
-    flex: 1 1 calc(50% - 0.5rem);
-    min-width: 120px;
-    padding: 0.5rem;
-    font-size: 0.9rem;
   }
 
   .month-summary {
@@ -808,6 +1191,23 @@ export default {
     height: 1px;
     margin: 0.5rem 0;
   }
+
+  .period-settings {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .date-setting {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .date-input {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 .modal-container {
@@ -819,219 +1219,199 @@ export default {
   z-index: 9998;
 }
 
-.day-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.grid-cell {
+  position: relative;
+  min-height: 120px;
 }
 
-.day-indicators {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.7rem;
+.grid-cell.today {
+  position: relative;
+  border: 2px solid rgba(255, 182, 193, 0.9) !important;
+  box-shadow: 0 2px 12px rgba(255, 182, 193, 0.2);
+  padding: 1rem;
+  min-height: 140px;
 }
 
-.indicator {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-weight: 600;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.grid-cell.today::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgb(255, 237, 250, 0.5);
+  pointer-events: none;
+  z-index: 1;
 }
 
-.cutoff {
-  background-color: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
+.grid-cell.today > * {
+  position: relative;
+  z-index: 1;
+  background: rgb(255, 237, 250, 0.5);
 }
 
-.period-start {
-  background-color: rgba(0, 178, 169, 0.1);
-  color: #00B2A9;
-}
-
-.day-cell.cutoff-date {
+.grid-cell.cutoff-date {
   background-color: rgba(220, 53, 69, 0.1);
   border: 2px solid rgba(220, 53, 69, 0.3);
   box-shadow: 0 2px 12px rgba(220, 53, 69, 0.15);
 }
 
-.day-cell.period-start {
+.grid-cell.period-start {
   background-color: rgba(0, 178, 169, 0.1);
   border: 2px solid rgba(0, 178, 169, 0.3);
   box-shadow: 0 2px 12px rgba(0, 178, 169, 0.15);
 }
 
-.day-cell.period-active {
+.grid-cell.period-active {
   background-color: rgba(0, 178, 169, 0.05);
   border: 1px solid rgba(0, 178, 169, 0.2);
   box-shadow: 0 2px 8px rgba(0, 178, 169, 0.1);
   opacity: 1;
 }
 
-.day-cell.period-inactive {
+.grid-cell.period-inactive {
   background-color: rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.1);
   opacity: 0.5;
   pointer-events: none;
 }
 
-.day-cell.period-inactive * {
+.grid-cell.period-inactive * {
   pointer-events: none;
 }
 
-.day-cell.period-inactive .day-number,
-.day-cell.period-inactive .expense-summary,
-.day-cell.period-inactive .day-actions {
+.grid-cell.period-inactive .day-number,
+.grid-cell.period-inactive .expense-summary,
+.grid-cell.period-inactive .day-actions {
   opacity: 0.5;
 }
 
-.day-cell.period-active .day-number {
+.grid-cell.period-active .day-number {
   color: #003B5C;
   font-weight: 600;
 }
 
-.day-cell.period-active .expense-summary {
+.grid-cell.period-active .expense-summary {
   opacity: 1;
 }
 
-.day-cell.period-inactive .day-number,
-.day-cell.period-inactive .expense-summary {
+.grid-cell.period-inactive .day-number,
+.grid-cell.period-inactive .expense-summary {
   opacity: 0.5;
 }
 
-/* Responsive tasarım için */
-@media (max-width: 768px) {
-  .day-indicators {
-    font-size: 0.6rem;
-  }
-
-  .indicator {
-    padding: 0.15rem 0.3rem;
-  }
-
-  .period-settings {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .date-setting {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .action-section {
-    overflow-x: hidden;
-  }
-
-  .action-buttons {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.75rem;
-  }
-
-  .action-btn {
-    flex: 1 1 calc(50% - 0.75rem); /* 2 sütunlu düzen */
-    min-width: 140px;
-  }
-
-  /* Takvim scroll göstergesi */
-  .calendar-grid::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 24px;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
-    pointer-events: none;
-  }
-}
-
-/* Scroll bar stilleri */
-.calendar-grid::-webkit-scrollbar {
-  height: 6px;
-}
-
-.calendar-grid::-webkit-scrollbar-track {
-  background: rgba(0, 59, 92, 0.05);
-  border-radius: 3px;
-}
-
-.calendar-grid::-webkit-scrollbar-thumb {
-  background: rgba(0, 59, 92, 0.1);
-  border-radius: 3px;
-}
-
-.calendar-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 59, 92, 0.2);
-}
-
-.day-cell {
-  background: white;
-  border-radius: 12px;
-  padding: 1rem;
-  min-height: 100px;
-  border: 1px solid rgba(0, 59, 92, 0.1);
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.day-cell.today {
-  background-color: rgba(147, 51, 234, 0.1) !important;
-  border: 2px solid rgba(147, 51, 234, 0.3) !important;
-  box-shadow: 0 2px 12px rgba(147, 51, 234, 0.1);
-}
-
-.day-cell.today .day-number {
-  color: rgb(147, 51, 234);
-  font-weight: 600;
-}
-
-.day-number {
-  font-weight: 500;
-  color: #003B5C;
-}
-
-.period-settings {
-  display: flex;
-  gap: 2rem;
-  margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(0, 59, 92, 0.05);
+/* Uyarı mesajları için yeni stiller */
+.budget-warning {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  padding: 0.5rem;
   border-radius: 8px;
-}
-
-.date-setting {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
-.setting-label {
-  color: #666;
-  font-size: 0.9rem;
-}
-
-.date-input {
+.no-expense-info {
+  background-color: rgba(91, 145, 59, 0.1);
+  color: #5B913B;
+  padding: 0.5rem;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: white;
-  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.budget-safe {
+  background-color: rgba(239, 176, 54, 0.1);
+  color: #EFB036;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.date-input:hover {
-  background: rgba(0, 59, 92, 0.1);
+.income-btn {
+  background-color: #00B2A9;
+  color: white;
 }
 
-/* DayCell için yeni stil */
-.day-cell.inactive {
-  opacity: 0.5;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.05);
+.income-btn:hover {
+  background-color: #009b94;
+}
+
+.debts-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.debts-btn:hover {
+  background-color: #c82333;
+}
+
+.bills-btn {
+  background-color: #003B5C;
+  color: white;
+}
+
+.bills-btn:hover {
+  background-color: #002b43;
+}
+
+.savings-btn {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.savings-btn:hover {
+  background-color: #e0a800;
+}
+
+/* PDF için özel stiller */
+@media print {
+  .calendar-grid {
+    font-size: 8px !important;
+    padding: 0.5rem !important;
+  }
+
+  .grid-cell {
+    min-height: 80px !important;
+    padding: 0.25rem !important;
+  }
+
+  .weekday {
+    font-size: 8px !important;
+  }
+
+  .day-number {
+    font-size: 10px !important;
+  }
+
+  .expense-summary {
+    font-size: 8px !important;
+  }
+
+  .budget-warning,
+  .no-expense-info,
+  .budget-safe {
+    font-size: 7px !important;
+    padding: 0.25rem !important;
+  }
 }
 </style> 
