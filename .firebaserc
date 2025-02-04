@@ -1,1 +1,5 @@
- 
+{
+  "projects": {
+    "default": "expense-tracker-1dc73"
+  }
+} 
