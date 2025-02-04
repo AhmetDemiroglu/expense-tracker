@@ -125,3 +125,4 @@ expense-tracker/
 ## 📜 Lisans
 
 Bu proje özel kullanım için geliştirilmiştir ve tüm hakları saklıdır.
+Son güncelleme: 4 Şubat 2025
