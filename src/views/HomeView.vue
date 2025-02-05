@@ -168,42 +168,46 @@ export default {
     })
 
     onMounted(async () => {
-      await Promise.all([
-        store.dispatch('income/fetchMonthlyIncome', {
-          year: selectedYear.value,
-          month: selectedMonth.value
-        }),
-        store.dispatch('debts/fetchMonthlyDebts', {
-          year: selectedYear.value,
-          month: selectedMonth.value
-        }),
-        store.dispatch('bills/fetchMonthlyBills', {
-          year: selectedYear.value,
-          month: selectedMonth.value
-        }),
-        store.dispatch('savings/fetchMonthlySavings', {
-          year: selectedYear.value,
-          month: selectedMonth.value
-        })
-      ])
+      try {
+        await Promise.all([
+          store.dispatch('income/fetchIncome', {
+            year: selectedYear.value,
+            month: selectedMonth.value
+          }),
+          store.dispatch('debts/fetchDebts', {
+            year: selectedYear.value,
+            month: selectedMonth.value
+          }),
+          store.dispatch('bills/fetchBills', {
+            year: selectedYear.value,
+            month: selectedMonth.value
+          }),
+          store.dispatch('savings/fetchSavings', {
+            year: selectedYear.value,
+            month: selectedMonth.value
+          })
+        ])
+      } catch (error) {
+        console.error('Veriler yüklenirken hata oluştu:', error)
+      }
     })
 
     // Ay veya yıl değiştiğinde verileri yeniden yükle
     watch([selectedMonth, selectedYear], async () => {
       await Promise.all([
-        store.dispatch('income/fetchMonthlyIncome', {
+        store.dispatch('income/fetchIncome', {
           year: selectedYear.value,
           month: selectedMonth.value
         }),
-        store.dispatch('debts/fetchMonthlyDebts', {
+        store.dispatch('debts/fetchDebts', {
           year: selectedYear.value,
           month: selectedMonth.value
         }),
-        store.dispatch('bills/fetchMonthlyBills', {
+        store.dispatch('bills/fetchBills', {
           year: selectedYear.value,
           month: selectedMonth.value
         }),
-        store.dispatch('savings/fetchMonthlySavings', {
+        store.dispatch('savings/fetchSavings', {
           year: selectedYear.value,
           month: selectedMonth.value
         })

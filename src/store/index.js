@@ -1,8 +1,8 @@
 import { createStore } from 'vuex'
-import expenses from './modules/expenses/index'
+import expenses from './modules/expenses'
 import income from './modules/income'
-import debts from './modules/debts'
 import bills from './modules/bills'
+import debts from './modules/debts'
 import savings from './modules/savings'
 
 export default createStore({
@@ -21,8 +21,8 @@ export default createStore({
   modules: {
     expenses,
     income,
-    debts,
     bills,
-    savings,
+    debts,
+    savings
   }
 }) 

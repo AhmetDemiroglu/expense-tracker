@@ -3,7 +3,7 @@ import { expenseAPI } from '@/services/api'
 export default {
   namespaced: true,
   state: {
-    monthlyBills: {
+    bills: {
       phone: 0,
       internet: 0,
       water: 0,
@@ -15,17 +15,23 @@ export default {
     }
   },
   mutations: {
-    SET_MONTHLY_BILLS(state, bills) {
-      state.monthlyBills = bills
+    SET_BILLS(state, bills) {
+      state.bills = bills
     },
     UPDATE_BILL_ITEM(state, { type, amount }) {
-      state.monthlyBills[type] = amount
+      state.bills[type] = amount
     }
   },
   actions: {
-    async fetchMonthlyBills({ commit }, { year, month }) {
-      const bills = await expenseAPI.getMonthlyBills(year, month)
-      commit('SET_MONTHLY_BILLS', bills)
+    async fetchBills({ commit }, { year, month }) {
+      try {
+        const bills = await expenseAPI.getMonthlyBills(year, month)
+        commit('SET_BILLS', bills)
+        return bills
+      } catch (error) {
+        console.error('Fatura bilgileri getirilemedi:', error)
+        throw error
+      }
     },
     async updateBill({ commit }, { year, month, type, amount }) {
       await expenseAPI.updateMonthlyBill(year, month, type, amount)
@@ -33,8 +39,8 @@ export default {
     }
   },
   getters: {
-    totalBills: state => {
-      return Object.values(state.monthlyBills).reduce((sum, val) => sum + val, 0)
+    totalBills: (state) => {
+      return Object.values(state.bills).reduce((sum, val) => sum + Number(val), 0)
     }
   }
 } 

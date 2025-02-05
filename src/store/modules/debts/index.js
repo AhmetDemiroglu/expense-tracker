@@ -3,33 +3,32 @@ import { expenseAPI } from '@/services/api'
 export default {
   namespaced: true,
   state: {
-    monthlyDebts: {
+    debts: {
       creditCard: 0,
       loan: 0,
       other: 0
     }
   },
   mutations: {
-    SET_MONTHLY_DEBTS(state, debts) {
-      state.monthlyDebts = debts
-    },
-    UPDATE_DEBT_ITEM(state, { type, amount }) {
-      state.monthlyDebts[type] = amount
+    SET_DEBTS(state, debts) {
+      state.debts = debts
     }
   },
   actions: {
-    async fetchMonthlyDebts({ commit }, { year, month }) {
-      const debts = await expenseAPI.getMonthlyDebts(year, month)
-      commit('SET_MONTHLY_DEBTS', debts)
-    },
-    async updateDebt({ commit }, { year, month, type, amount }) {
-      await expenseAPI.updateMonthlyDebt(year, month, type, amount)
-      commit('UPDATE_DEBT_ITEM', { type, amount })
+    async fetchDebts({ commit }, { year, month }) {
+      try {
+        const debts = await expenseAPI.getMonthlyDebts(year, month)
+        commit('SET_DEBTS', debts)
+        return debts
+      } catch (error) {
+        console.error('Borç bilgileri getirilemedi:', error)
+        throw error
+      }
     }
   },
   getters: {
-    totalDebts: state => {
-      return Object.values(state.monthlyDebts).reduce((sum, val) => sum + val, 0)
+    totalDebts: (state) => {
+      return Object.values(state.debts).reduce((sum, val) => sum + Number(val), 0)
     }
   }
 } 

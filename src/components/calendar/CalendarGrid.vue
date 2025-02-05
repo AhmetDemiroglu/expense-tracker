@@ -3,14 +3,24 @@
     <div class="grid-header-container">
       <div class="month-title">
         <div class="month-navigation">
-          <button class="nav-btn" @click="navigateMonth(-1)" title="Önceki Ay">
+          <button 
+            class="nav-btn" 
+            @click="navigateMonth(-1)" 
+            :disabled="isLoading"
+            title="Önceki Ay"
+          >
             <i class="fas fa-chevron-left"></i>
           </button>
           <div class="month-text">
             <i class="far fa-calendar-alt"></i>
             <h1>{{ monthName }} {{ year }}</h1>
           </div>
-          <button class="nav-btn" @click="navigateMonth(1)" title="Sonraki Ay">
+          <button 
+            class="nav-btn" 
+            @click="navigateMonth(1)" 
+            :disabled="isLoading"
+            title="Sonraki Ay"
+          >
             <i class="fas fa-chevron-right"></i>
           </button>
         </div>
@@ -21,6 +31,11 @@
       </router-link>
     </div>
     
+    <!-- Yükleme göstergesi -->
+    <div v-if="isLoading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+    </div>
+
     <div class="month-actions">
       <div class="action-buttons-container">
         <div class="action-buttons">
@@ -247,6 +262,7 @@ export default {
     const isEditingPeriod = ref(false)
     const cutoffDateInput = ref('')
     const periodStartInput = ref('')
+    const isLoading = ref(false)
 
     const months = [
       'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
@@ -342,27 +358,37 @@ export default {
 
     // Seçili ayın harcamalarını yükle
     const loadAllData = async () => {
-      await fetchMonthData()
-      await store.dispatch('expenses/fetchExpenses', {
-        year: props.year,
-        month: props.month
-      })
-      await store.dispatch('income/fetchIncome', {
-        year: props.year,
-        month: props.month
-      })
-      await store.dispatch('bills/fetchBills', {
-        year: props.year,
-        month: props.month
-      })
-      await store.dispatch('debts/fetchDebts', {
-        year: props.year,
-        month: props.month
-      })
-      await store.dispatch('savings/fetchSavings', {
-        year: props.year,
-        month: props.month
-      })
+      if (isLoading.value) return // Eğer zaten yükleme yapılıyorsa çık
+      
+      isLoading.value = true
+      try {
+        await Promise.all([
+          store.dispatch('expenses/fetchExpenses', {
+            year: props.year,
+            month: props.month
+          }),
+          store.dispatch('income/fetchIncome', {
+            year: props.year,
+            month: props.month
+          }),
+          store.dispatch('bills/fetchBills', {
+            year: props.year,
+            month: props.month
+          }),
+          store.dispatch('debts/fetchDebts', {
+            year: props.year,
+            month: props.month
+          }),
+          store.dispatch('savings/fetchSavings', {
+            year: props.year,
+            month: props.month
+          })
+        ])
+      } catch (error) {
+        console.error('Veriler yüklenirken hata oluştu:', error)
+      } finally {
+        isLoading.value = false
+      }
     }
 
     // Route parametrelerini izle
@@ -783,19 +809,28 @@ export default {
       }, 1500)
     }
 
-    const navigateMonth = (direction) => {
-      let newMonth = parseInt(props.month) + direction
-      let newYear = parseInt(props.year)
+    const navigateMonth = async (step) => {
+      if (isLoading.value) return // Eğer yükleme yapılıyorsa tıklamayı engelle
+      
+      const newDate = new Date(Number(props.year), Number(props.month) + step, 1)
+      const newYear = newDate.getFullYear()
+      const newMonth = newDate.getMonth()
 
-      if (newMonth > 11) {
-        newMonth = 0
-        newYear++
-      } else if (newMonth < 0) {
-        newMonth = 11
-        newYear--
-      }
-
-      router.push(`/month/${newYear}/${newMonth}`)
+      // Önce store'u güncelle
+      store.commit('SET_SELECTED_YEAR', newYear)
+      store.commit('SET_SELECTED_MONTH', newMonth)
+      
+      // Verileri yüklemeye başla
+      await loadAllData()
+      
+      // Yönlendirmeyi yap
+      router.push({
+        name: 'month-detail',
+        params: {
+          year: newYear.toString(),
+          month: newMonth.toString()
+        }
+      })
     }
 
     onMounted(() => {
@@ -883,7 +918,8 @@ export default {
       handleDelete,
       exportToPDF,
       printCalendar,
-      navigateMonth
+      navigateMonth,
+      isLoading
     }
   }
 }
@@ -992,16 +1028,17 @@ export default {
 }
 
 .grid-body-wrapper {
-  overflow: hidden;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
+  padding-bottom: 1rem;
 }
 
 .grid-body {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
   gap: 0.5rem;
-  width: 100%;
-  grid-auto-rows: 1fr;
+  min-width: 840px;
 }
 
 .month-actions {
@@ -1208,6 +1245,15 @@ export default {
     width: 100%;
     justify-content: space-between;
   }
+
+  .grid-body {
+    grid-template-columns: repeat(7, 120px);
+  }
+
+  .grid-cell {
+    min-height: 100px;
+    padding: 0.25rem;
+  }
 }
 
 .modal-container {
@@ -1413,5 +1459,37 @@ export default {
     font-size: 7px !important;
     padding: 0.25rem !important;
   }
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #003B5C;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style> 
