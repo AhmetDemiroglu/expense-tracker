@@ -22,8 +22,14 @@ export default {
       }
     },
     async updateSavings({ commit }, { year, month, amount }) {
-      await expenseAPI.updateMonthlySavings(year, month, amount)
-      commit('SET_SAVINGS', amount)
+      try {
+        await expenseAPI.updateMonthlySavings(year, month, amount)
+        commit('SET_SAVINGS', amount)
+        return true
+      } catch (error) {
+        console.error('Birikim güncellenemedi:', error)
+        throw error
+      }
     }
   }
 } 

@@ -12,6 +12,9 @@ export default {
   mutations: {
     SET_INCOME(state, income) {
       state.income = income
+    },
+    UPDATE_INCOME(state, { type, amount }) {
+      state.income[type] = Number(amount)
     }
   },
   actions: {
@@ -22,6 +25,16 @@ export default {
         return income
       } catch (error) {
         console.error('Gelir bilgileri getirilemedi:', error)
+        throw error
+      }
+    },
+    async updateIncome({ commit }, { year, month, type, amount }) {
+      try {
+        await expenseAPI.updateMonthlyIncome(year, month, type, amount)
+        commit('UPDATE_INCOME', { type, amount })
+        return true
+      } catch (error) {
+        console.error('Gelir güncellenemedi:', error)
         throw error
       }
     }

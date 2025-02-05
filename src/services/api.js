@@ -149,18 +149,31 @@ export const expenseAPI = {
 
   // Gelir metodları
   async getMonthlyIncome(year, month) {
-    const incomeRef = ref(db, `income/${year}/${month}`)
-    const snapshot = await get(incomeRef)
-    return snapshot.exists() ? snapshot.val() : {
-      salary: 0,
-      rent: 0,
-      other: 0
+    try {
+      // Eski yapıya göre düzeltildi: income/year/month
+      const incomeRef = ref(db, `income/${year}/${month}`)
+      const snapshot = await get(incomeRef)
+      return snapshot.exists() ? snapshot.val() : {
+        salary: 0,
+        rent: 0,
+        other: 0
+      }
+    } catch (error) {
+      console.error('Gelir bilgileri getirilemedi:', error)
+      throw error
     }
   },
 
   async updateMonthlyIncome(year, month, type, amount) {
-    const incomeRef = ref(db, `income/${year}/${month}`)
-    return await update(incomeRef, { [type]: amount })
+    try {
+      // Eski yapıya göre düzeltildi: income/year/month
+      const incomeRef = ref(db, `income/${year}/${month}`)
+      await update(incomeRef, { [type]: Number(amount) })
+      return true
+    } catch (error) {
+      console.error('Gelir güncellenemedi:', error)
+      throw error
+    }
   },
 
   // Fatura metodları
@@ -258,6 +271,63 @@ export const expenseAPI = {
       return true
     } catch (error) {
       console.error('Kesim tarihi güncellenemedi:', error)
+      throw error
+    }
+  },
+
+  async saveMonthSettings(year, month, settings) {
+    try {
+      const monthRef = ref(db, `months/${year}/${month}`)
+      await update(monthRef, {
+        ...settings,
+        lastUpdated: Date.now()
+      })
+      return true
+    } catch (error) {
+      console.error('Ay ayarları kaydedilemedi:', error)
+      throw error
+    }
+  },
+
+  async getMonthSettings(year, month) {
+    try {
+      const monthRef = ref(db, `months/${year}/${month}`)
+      const snapshot = await get(monthRef)
+      return snapshot.exists() ? snapshot.val() : {
+        cutoffDate: null,
+        periodStartDate: null,
+        lastUpdated: null
+      }
+    } catch (error) {
+      console.error('Ay ayarları getirilemedi:', error)
+      throw error
+    }
+  },
+
+  async getMonthlyExpenses(year, month) {
+    try {
+      const expensesRef = ref(db, `expenses/${year}/${month}`)
+      const snapshot = await get(expensesRef)
+      
+      if (snapshot.exists()) {
+        const expenses = []
+        snapshot.forEach((childSnapshot) => {
+          const expense = childSnapshot.val()
+          // Sadece ilgili aya ait harcamaları al
+          const expenseDate = new Date(expense.date)
+          if (expenseDate.getMonth() === Number(month) && 
+              expenseDate.getFullYear() === Number(year)) {
+            expenses.push({
+              id: childSnapshot.key,
+              ...expense
+            })
+          }
+        })
+        return expenses
+      }
+      return []
+    } catch (error) {
+      console.error('Harcamalar getirilemedi:', error)
       throw error
     }
   }

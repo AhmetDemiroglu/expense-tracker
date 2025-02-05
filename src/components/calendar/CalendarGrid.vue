@@ -75,7 +75,7 @@
         <div class="date-setting">
           <span class="setting-label">Dönem Başlangıcı:</span>
           <div class="date-input" v-if="!isEditingPeriod" @click="startEditingPeriod">
-            {{ formatPeriodDate(monthData.periodStartDate) }}
+            {{ monthData.periodStartDate ? formatPeriodDate(monthData.periodStartDate) : 'Seçilmedi' }}
             <i class="fas fa-pencil-alt"></i>
           </div>
           <input
@@ -90,7 +90,7 @@
         <div class="date-setting">
           <span class="setting-label">Hesap Kesim:</span>
           <div class="date-input" v-if="!isEditingCutoff" @click="startEditingCutoff">
-            {{ formatPeriodDate(monthData.cutoffDate) }}
+            {{ monthData.cutoffDate ? formatPeriodDate(monthData.cutoffDate) : 'Seçilmedi' }}
             <i class="fas fa-pencil-alt"></i>
           </div>
           <input
@@ -221,6 +221,8 @@ import SavingsModal from '../savings/SavingsModal.vue'
 import ConfirmModal from '../shared/ConfirmModal.vue'
 import { expenseAPI } from '../../services/api'
 import html2pdf from 'html2pdf.js/dist/html2pdf.bundle.min'
+import { ref as dbRef, get } from 'firebase/database'
+import { db } from '@/services/firebase'
 
 export default {
   name: 'CalendarGrid',
@@ -356,13 +358,49 @@ export default {
       }
     }
 
-    // Seçili ayın harcamalarını yükle
+    // Önce fetchMonthData fonksiyonunu tanımlayalım
+    const fetchMonthData = async () => {
+      try {
+        const monthRef = dbRef(db, `months/${props.year}/${props.month}`)
+        const snapshot = await get(monthRef)
+        
+        // Eğer o ay için veri yoksa boş değerlerle başlat
+        monthData.value = {
+          cutoffDate: null,
+          periodStartDate: null,
+          lastUpdated: null
+        }
+
+        // Sadece o ay için kayıtlı veri varsa kullan
+        if (snapshot.exists()) {
+          const data = snapshot.val()
+          if (data.cutoffDate) {
+            monthData.value.cutoffDate = data.cutoffDate
+            cutoffDateInput.value = new Date(data.cutoffDate).toISOString().split('T')[0]
+          }
+          if (data.periodStartDate) {
+            monthData.value.periodStartDate = data.periodStartDate
+            periodStartInput.value = new Date(data.periodStartDate).toISOString().split('T')[0]
+          }
+          monthData.value.lastUpdated = data.lastUpdated
+        } else {
+          // Ay için veri yoksa input alanlarını da temizle
+          cutoffDateInput.value = ''
+          periodStartInput.value = ''
+        }
+      } catch (error) {
+        console.error('Ay verileri yüklenirken hata oluştu:', error)
+      }
+    }
+
+    // Sonra loadAllData fonksiyonunu tanımlayalım
     const loadAllData = async () => {
-      if (isLoading.value) return // Eğer zaten yükleme yapılıyorsa çık
+      if (isLoading.value) return
       
       isLoading.value = true
       try {
         await Promise.all([
+          fetchMonthData(),
           store.dispatch('expenses/fetchExpenses', {
             year: props.year,
             month: props.month
@@ -391,7 +429,12 @@ export default {
       }
     }
 
-    // Route parametrelerini izle
+    // Watch yerine onMounted kullanarak başlangıç verilerini yükleyelim
+    onMounted(() => {
+      loadAllData()
+    })
+
+    // Props değişikliklerini izleyelim
     watch(
       () => [props.year, props.month],
       () => {
@@ -526,56 +569,34 @@ export default {
     // Tarihleri kaydet
     const saveDates = async () => {
       try {
+        // Tarihleri timestamp'e çevir
+        const cutoffTimestamp = cutoffDateInput.value ? 
+          new Date(cutoffDateInput.value).getTime() : null
+        
+        const periodStartTimestamp = periodStartInput.value ? 
+          new Date(periodStartInput.value).getTime() : null
+
+        // Null check yap
+        if ((cutoffDateInput.value && isNaN(cutoffTimestamp)) || 
+            (periodStartInput.value && isNaN(periodStartTimestamp))) {
+          throw new Error('Geçersiz tarih formatı')
+        }
+
         await expenseAPI.updateMonthDates(props.year, props.month, {
-          cutoffDate: monthData.value.cutoffDate,
-          periodStartDate: monthData.value.periodStartDate
+          cutoffDate: cutoffTimestamp,
+          periodStartDate: periodStartTimestamp
         })
+
+        // State'i güncelle
+        monthData.value = {
+          ...monthData.value,
+          cutoffDate: cutoffTimestamp,
+          periodStartDate: periodStartTimestamp
+        }
       } catch (error) {
         console.error('Tarihler kaydedilemedi:', error)
+        throw error
       }
-    }
-
-    // Ay verilerini getir
-    const fetchMonthData = async () => {
-      try {
-        const data = await expenseAPI.getMonthSummary(props.year, props.month)
-        monthData.value = data
-      } catch (error) {
-        console.error('Ay verileri alınamadı:', error)
-      }
-    }
-
-    // Modal açma/kapama metodları
-    const startEditingCutoff = () => {
-      isEditingCutoff.value = true
-      if (monthData.value.cutoffDate) {
-        const date = new Date(monthData.value.cutoffDate)
-        cutoffDateInput.value = date.toISOString().split('T')[0]
-      }
-    }
-    const saveCutoffDate = () => {
-      monthData.value.cutoffDate = new Date(cutoffDateInput.value).getTime()
-      isEditingCutoff.value = false
-      saveDates()
-    }
-    const startEditingPeriod = () => {
-      isEditingPeriod.value = true
-      if (monthData.value.periodStartDate) {
-        const date = new Date(monthData.value.periodStartDate)
-        periodStartInput.value = date.toISOString().split('T')[0]
-      }
-    }
-    const savePeriodDate = () => {
-      monthData.value.periodStartDate = new Date(periodStartInput.value).getTime()
-      isEditingPeriod.value = false
-      saveDates()
-    }
-
-    // Tarih formatlama fonksiyonu
-    const formatPeriodDate = (date) => {
-      if (!date) return 'Seçilmedi'
-      const formattedDate = new Date(date)
-      return `${formattedDate.getDate()} ${months[formattedDate.getMonth()]}`
     }
 
     // Dönem içi toplam harcamalar
@@ -833,38 +854,63 @@ export default {
       })
     }
 
-    onMounted(() => {
-      loadAllData()
-      // Touch ve drag olayları için
-      const gridWrapper = document.querySelector('.grid-body-wrapper')
-      if (gridWrapper) {
-        let isDown = false
-        let startX
-        let scrollLeft
-
-        gridWrapper.addEventListener('mousedown', (e) => {
-          isDown = true
-          startX = e.pageX - gridWrapper.offsetLeft
-          scrollLeft = gridWrapper.scrollLeft
-        })
-
-        gridWrapper.addEventListener('mouseleave', () => {
-          isDown = false
-        })
-
-        gridWrapper.addEventListener('mouseup', () => {
-          isDown = false
-        })
-
-        gridWrapper.addEventListener('mousemove', (e) => {
-          if (!isDown) return
-          e.preventDefault()
-          const x = e.pageX - gridWrapper.offsetLeft
-          const walk = (x - startX) * 2
-          gridWrapper.scrollLeft = scrollLeft - walk
-        })
+    // Modal açma/kapama metodları
+    const startEditingCutoff = () => {
+      isEditingCutoff.value = true
+      if (monthData.value.cutoffDate) {
+        const date = new Date(monthData.value.cutoffDate)
+        cutoffDateInput.value = date.toISOString().split('T')[0]
       }
-    })
+    }
+
+    const saveCutoffDate = () => {
+      if (!cutoffDateInput.value) {
+        isEditingCutoff.value = false
+        return
+      }
+      
+      const timestamp = new Date(cutoffDateInput.value).getTime()
+      if (isNaN(timestamp)) {
+        console.error('Geçersiz tarih')
+        return
+      }
+
+      monthData.value.cutoffDate = timestamp
+      isEditingCutoff.value = false
+      saveDates()
+    }
+
+    const startEditingPeriod = () => {
+      isEditingPeriod.value = true
+      if (monthData.value.periodStartDate) {
+        const date = new Date(monthData.value.periodStartDate)
+        periodStartInput.value = date.toISOString().split('T')[0]
+      }
+    }
+
+    const savePeriodDate = () => {
+      if (!periodStartInput.value) {
+        isEditingPeriod.value = false
+        return
+      }
+      
+      const timestamp = new Date(periodStartInput.value).getTime()
+      if (isNaN(timestamp)) {
+        console.error('Geçersiz tarih')
+        return
+      }
+
+      monthData.value.periodStartDate = timestamp
+      isEditingPeriod.value = false
+      saveDates()
+    }
+
+    // Tarih formatlama fonksiyonu
+    const formatPeriodDate = (date) => {
+      if (!date) return 'Seçilmedi'
+      const formattedDate = new Date(date)
+      return `${formattedDate.getDate()} ${months[formattedDate.getMonth()]}`
+    }
 
     return {
       weekDays,

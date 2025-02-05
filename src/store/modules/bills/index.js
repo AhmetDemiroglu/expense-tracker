@@ -18,8 +18,8 @@ export default {
     SET_BILLS(state, bills) {
       state.bills = bills
     },
-    UPDATE_BILL_ITEM(state, { type, amount }) {
-      state.bills[type] = amount
+    UPDATE_BILL(state, { type, amount }) {
+      state.bills[type] = Number(amount)
     }
   },
   actions: {
@@ -34,8 +34,14 @@ export default {
       }
     },
     async updateBill({ commit }, { year, month, type, amount }) {
-      await expenseAPI.updateMonthlyBill(year, month, type, amount)
-      commit('UPDATE_BILL_ITEM', { type, amount })
+      try {
+        await expenseAPI.updateMonthlyBill(year, month, type, amount)
+        commit('UPDATE_BILL', { type, amount })
+        return true
+      } catch (error) {
+        console.error('Fatura güncellenemedi:', error)
+        throw error
+      }
     }
   },
   getters: {
