@@ -4,6 +4,7 @@ import income from './modules/income'
 import bills from './modules/bills'
 import debts from './modules/debts'
 import savings from './modules/savings'
+import auth from './modules/auth'
 
 export default createStore({
   state: {
@@ -23,6 +24,7 @@ export default createStore({
     income,
     bills,
     debts,
-    savings
+    savings,
+    auth
   }
 }) 

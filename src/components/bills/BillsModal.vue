@@ -8,159 +8,161 @@
         </button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="bills-form">
-        <div class="form-group">
-          <label for="phone">Telefon (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="phone"
-              v-model="form.phone"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              autocomplete="off"
-            />
-            <span class="currency">₺</span>
+      <div class="modal-body">
+        <form @submit.prevent="handleSubmit" class="bills-form">
+          <div class="form-group">
+            <label for="phone">Telefon (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="phone"
+                v-model="form.phone"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                autocomplete="off"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="internet">İnternet (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="internet"
-              v-model="form.internet"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="internet">İnternet (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="internet"
+                v-model="form.internet"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="water">Su (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="water"
-              v-model="form.water"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="water">Su (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="water"
+                v-model="form.water"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="maintenance">Aidat (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="maintenance"
-              v-model="form.maintenance"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="maintenance">Aidat (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="maintenance"
+                v-model="form.maintenance"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="naturalGas">Doğalgaz (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="naturalGas"
-              v-model="form.naturalGas"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="naturalGas">Doğalgaz (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="naturalGas"
+                v-model="form.naturalGas"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="electricity">Elektrik (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="electricity"
-              v-model="form.electricity"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="electricity">Elektrik (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="electricity"
+                v-model="form.electricity"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="pool">Havuz (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="pool"
-              v-model="form.pool"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="pool">Havuz (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="pool"
+                v-model="form.pool"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="other">Diğer (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="other"
-              v-model="form.other"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="other">Diğer (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="other"
+                v-model="form.other"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-summary">
-          <span class="label">Toplam Fatura:</span>
-          <span class="amount negative">{{ formatCurrency(totalBills) }}</span>
-        </div>
+          <div class="form-summary">
+            <span class="label">Toplam Fatura:</span>
+            <span class="amount negative">{{ formatCurrency(totalBills) }}</span>
+          </div>
 
-        <div class="form-actions">
-          <button type="button" class="clear-btn" @click="clearForm">
-            <i class="fas fa-trash"></i>
-            Temizle
-          </button>
-          <div class="action-buttons">
-            <button type="button" class="cancel-btn" @click="$emit('close')">
-              <i class="fas fa-times"></i>
-              İptal
+          <div class="form-actions">
+            <button type="button" class="clear-btn" @click="clearForm">
+              <i class="fas fa-trash"></i>
+              Temizle
             </button>
-            <button type="submit" class="save-btn">
-              <i class="fas fa-check"></i>
-              Kaydet
-            </button>
+            <div class="action-buttons">
+              <button type="button" class="cancel-btn" @click="$emit('close')">
+                <i class="fas fa-times"></i>
+                İptal
+              </button>
+              <button type="submit" class="save-btn">
+                <i class="fas fa-check"></i>
+                Kaydet
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
 
-      <!-- Güncelleme Onay Modalı -->
-      <ConfirmModalEdit
-        v-if="showConfirmUpdate"
-        title="Faturaları Güncelle"
-        message="Fatura bilgilerini güncellemek istediğinizden emin misiniz?"
-        @confirm="confirmUpdate"
-        @cancel="showConfirmUpdate = false"
-      />
+        <!-- Güncelleme Onay Modalı -->
+        <ConfirmModalEdit
+          v-if="showConfirmUpdate"
+          title="Faturaları Güncelle"
+          message="Fatura bilgilerini güncellemek istediğinizden emin misiniz?"
+          @confirm="confirmUpdate"
+          @cancel="showConfirmUpdate = false"
+        />
+      </div>
     </div>
   </div>
 </template>

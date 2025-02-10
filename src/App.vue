@@ -11,6 +11,9 @@
 </template>
 
 <script>
+import { onMounted } from 'vue'
+import { useStore } from 'vuex'
+import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import Header from './components/layout/Header.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 
@@ -20,14 +23,42 @@ export default {
     Header,
     Sidebar
   },
-  data() {
+  setup() {
+    const store = useStore()
+    
+    onMounted(() => {
+      const auth = getAuth()
+      let isInitialLoad = true
+
+      // Persistence ayarı
+      setPersistence(auth, browserLocalPersistence)
+        .then(() => {
+          onAuthStateChanged(auth, async (user) => {
+            try {
+              if (isInitialLoad) {
+                isInitialLoad = false
+                if (user) {
+                  await store.dispatch('auth/handleAuthStateChange', user)
+                }
+                return
+              }
+
+              await store.dispatch('auth/handleAuthStateChange', user)
+            } catch (error) {
+              console.error('Auth state handling error:', error)
+            }
+          })
+        })
+        .catch((error) => {
+          console.error('Auth persistence error:', error)
+        })
+    })
+
     return {
-      isSidebarOpen: false
-    }
-  },
-  methods: {
-    toggleSidebar() {
-      this.isSidebarOpen = !this.isSidebarOpen
+      isSidebarOpen: false,
+      toggleSidebar() {
+        this.isSidebarOpen = !this.isSidebarOpen
+      }
     }
   }
 }

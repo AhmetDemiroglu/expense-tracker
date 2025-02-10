@@ -7,76 +7,78 @@
           <i class="fas fa-times"></i>
         </button>
       </div>
-
-      <form @submit.prevent="handleSubmit" class="income-form">
-        <div class="form-group">
-          <label for="salary">Maaş (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="salary"
-              v-model="form.salary"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              autocomplete="off"
-            />
-            <span class="currency">₺</span>
+      
+      <div class="modal-body">
+        <form @submit.prevent="handleSubmit" class="income-form">
+          <div class="form-group">
+            <label for="salary">Maaş (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="salary"
+                v-model="form.salary"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                autocomplete="off"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="rent">Kira (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="rent"
-              v-model="form.rent"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="rent">Kira (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="rent"
+                v-model="form.rent"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="other">Diğer (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="other"
-              v-model="form.other"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-            />
-            <span class="currency">₺</span>
+          <div class="form-group">
+            <label for="other">Diğer (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="other"
+                v-model="form.other"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="form-summary">
-          <span class="label">Toplam Gelir:</span>
-          <span class="amount positive">{{ formatCurrency(totalIncome) }}</span>
-        </div>
+          <div class="form-summary">
+            <span class="label">Toplam Gelir:</span>
+            <span class="amount positive">{{ formatCurrency(totalIncome) }}</span>
+          </div>
 
-        <div class="form-actions">
-          <button type="button" class="clear-btn" @click="clearForm">
-            <i class="fas fa-trash"></i>
-            Temizle
-          </button>
-          <div class="action-buttons">
-            <button type="button" class="cancel-btn" @click="$emit('close')">
-              <i class="fas fa-times"></i>
-              İptal
+          <div class="form-actions">
+            <button type="button" class="clear-btn" @click="clearForm">
+              <i class="fas fa-trash"></i>
+              Temizle
             </button>
-            <button type="submit" class="save-btn">
-              <i class="fas fa-check"></i>
-              Kaydet
-            </button>
+            <div class="action-buttons">
+              <button type="button" class="cancel-btn" @click="$emit('close')">
+                <i class="fas fa-times"></i>
+                İptal
+              </button>
+              <button type="submit" class="save-btn">
+                <i class="fas fa-check"></i>
+                Kaydet
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
       <!-- Güncelleme Onay Modalı -->
       <ConfirmModalEdit
@@ -198,16 +200,26 @@ export default {
 </script>
 
 <style scoped>
+/* Sadece form içi özel stiller */
+.income-form {
+  padding: 0 1rem;
+}
+
+.form-summary {
+  margin: 2rem 0;
+  padding: 1.25rem;
+  background: rgba(0, 59, 92, 0.05);
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .form-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 2rem;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 1rem;
 }
 
 .clear-btn {

@@ -33,22 +33,28 @@ export default {
   actions: {
     async fetchExpenses({ commit }, { year, month }) {
       try {
+        commit('SET_LOADING', true)
         const expenses = await expenseAPI.getExpenses(year, month)
         commit('SET_EXPENSES', expenses)
-        return expenses
       } catch (error) {
         console.error('Harcamalar getirilemedi:', error)
-        throw error
+        commit('SET_ERROR', error.message)
+      } finally {
+        commit('SET_LOADING', false)
       }
     },
-    async addExpense({ commit }, { year, month, expense }) {
+    async addExpense({ commit, dispatch }, { year, month, expense }) {
       try {
-        const newExpense = await expenseAPI.addExpense(year, month, expense)
-        commit('ADD_EXPENSE', newExpense)
-        return newExpense.id
+        commit('SET_LOADING', true)
+        await expenseAPI.addExpense(year, month, expense)
+        // Listeyi yenile
+        await dispatch('fetchExpenses', { year, month })
       } catch (error) {
+        console.error('Harcama eklenemedi:', error)
         commit('SET_ERROR', error.message)
         throw error
+      } finally {
+        commit('SET_LOADING', false)
       }
     },
     async updateExpense({ commit }, { id, expense }) {
@@ -73,6 +79,11 @@ export default {
         commit('SET_ERROR', error.message)
         throw error
       }
+    }
+  },
+  getters: {
+    totalExpenses: state => {
+      return state.expenses.reduce((total, expense) => total + Number(expense.amount), 0)
     }
   }
 } 

@@ -8,61 +8,63 @@
         </button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="savings-form">
-        <div class="form-group">
-          <label for="savings">Bu Ay İçin Birikim Hedefi (TL)</label>
-          <div class="amount-input">
-            <input
-              type="number"
-              id="savings"
-              v-model="amount"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              required
-              autocomplete="off"
-            />
-            <span class="currency">₺</span>
+      <div class="modal-body">
+        <form @submit.prevent="handleSubmit" class="savings-form">
+          <div class="form-group">
+            <label for="savings">Bu Ay İçin Birikim Hedefi (TL)</label>
+            <div class="amount-input">
+              <input
+                type="number"
+                id="savings"
+                v-model="amount"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+                autocomplete="off"
+              />
+              <span class="currency">₺</span>
+            </div>
           </div>
-        </div>
 
-        <div class="savings-info">
-          <div class="info-item">
-            <i class="fas fa-piggy-bank"></i>
-            <p>Bu ay için belirlediğiniz birikim hedefi, aylık harcama limitinizden düşülecektir.</p>
+          <div class="savings-info">
+            <div class="info-item">
+              <i class="fas fa-piggy-bank"></i>
+              <p>Bu ay için belirlediğiniz birikim hedefi, aylık harcama limitinizden düşülecektir.</p>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-chart-line"></i>
+              <p>Birikiminiz, günlük harcama limitinizin hesaplanmasında dikkate alınır.</p>
+            </div>
           </div>
-          <div class="info-item">
-            <i class="fas fa-chart-line"></i>
-            <p>Birikiminiz, günlük harcama limitinizin hesaplanmasında dikkate alınır.</p>
-          </div>
-        </div>
 
-        <div class="form-actions">
-          <button type="button" class="clear-btn" @click="clearForm">
-            <i class="fas fa-trash"></i>
-            Temizle
-          </button>
-          <div class="action-buttons">
-            <button type="button" class="cancel-btn" @click="$emit('close')">
-              <i class="fas fa-times"></i>
-              İptal
+          <div class="form-actions">
+            <button type="button" class="clear-btn" @click="clearForm">
+              <i class="fas fa-trash"></i>
+              Temizle
             </button>
-            <button type="submit" class="save-btn">
-              <i class="fas fa-check"></i>
-              Kaydet
-            </button>
+            <div class="action-buttons">
+              <button type="button" class="cancel-btn" @click="$emit('close')">
+                <i class="fas fa-times"></i>
+                İptal
+              </button>
+              <button type="submit" class="save-btn">
+                <i class="fas fa-check"></i>
+                Kaydet
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
 
-      <!-- Güncelleme Onay Modalı -->
-      <ConfirmModalEdit
-        v-if="showConfirmUpdate"
-        title="Birikim Hedefini Güncelle"
-        message="Birikim hedefini güncellemek istediğinizden emin misiniz?"
-        @confirm="confirmUpdate"
-        @cancel="showConfirmUpdate = false"
-      />
+        <!-- Güncelleme Onay Modalı -->
+        <ConfirmModalEdit
+          v-if="showConfirmUpdate"
+          title="Birikim Hedefini Güncelle"
+          message="Birikim hedefini güncellemek istediğinizden emin misiniz?"
+          @confirm="confirmUpdate"
+          @cancel="showConfirmUpdate = false"
+        />
+      </div>
     </div>
   </div>
 </template>

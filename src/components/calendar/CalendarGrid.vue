@@ -197,18 +197,16 @@
 
     <!-- Modallar -->
     <Teleport to="body">
-      <div v-if="showIncomeModal || showDebtsModal || showBillsModal || showSavingsModal" class="modal-container">
-        <IncomeModal v-if="showIncomeModal" @close="closeIncomeModal" />
-        <DebtsModal v-if="showDebtsModal" @close="closeDebtsModal" />
-        <BillsModal v-if="showBillsModal" @close="closeBillsModal" />
-        <SavingsModal v-if="showSavingsModal" @close="closeSavingsModal" />
-      </div>
+      <IncomeModal v-if="showIncomeModal" @close="closeIncomeModal" />
+      <DebtsModal v-if="showDebtsModal" @close="closeDebtsModal" />
+      <BillsModal v-if="showBillsModal" @close="closeBillsModal" />
+      <SavingsModal v-if="showSavingsModal" @close="closeSavingsModal" />
     </Teleport>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter, useRoute } from 'vue-router'
 import DayCell from './DayCell.vue'
@@ -223,6 +221,8 @@ import { expenseAPI } from '../../services/api'
 import html2pdf from 'html2pdf.js/dist/html2pdf.bundle.min'
 import { ref as dbRef, get } from 'firebase/database'
 import { db } from '@/services/firebase'
+import { getAuth } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
 
 export default {
   name: 'CalendarGrid',
@@ -358,80 +358,61 @@ export default {
       }
     }
 
-    // Önce fetchMonthData fonksiyonunu tanımlayalım
+    // Önce fetchMonthData fonksiyonunu güncelleyelim
     const fetchMonthData = async () => {
       try {
-        const monthRef = dbRef(db, `months/${props.year}/${props.month}`)
-        const snapshot = await get(monthRef)
+        const data = await expenseAPI.getMonthSettings(props.year, props.month)
         
-        // Eğer o ay için veri yoksa boş değerlerle başlat
         monthData.value = {
-          cutoffDate: null,
-          periodStartDate: null,
-          lastUpdated: null
+          cutoffDate: data.cutoffDate,
+          periodStartDate: data.periodStartDate,
+          lastUpdated: data.lastUpdated
         }
 
-        // Sadece o ay için kayıtlı veri varsa kullan
-        if (snapshot.exists()) {
-          const data = snapshot.val()
-          if (data.cutoffDate) {
-            monthData.value.cutoffDate = data.cutoffDate
-            cutoffDateInput.value = new Date(data.cutoffDate).toISOString().split('T')[0]
-          }
-          if (data.periodStartDate) {
-            monthData.value.periodStartDate = data.periodStartDate
-            periodStartInput.value = new Date(data.periodStartDate).toISOString().split('T')[0]
-          }
-          monthData.value.lastUpdated = data.lastUpdated
-        } else {
-          // Ay için veri yoksa input alanlarını da temizle
-          cutoffDateInput.value = ''
-          periodStartInput.value = ''
+        if (data.cutoffDate) {
+          cutoffDateInput.value = new Date(data.cutoffDate).toISOString().split('T')[0]
+        }
+        if (data.periodStartDate) {
+          periodStartInput.value = new Date(data.periodStartDate).toISOString().split('T')[0]
         }
       } catch (error) {
         console.error('Ay verileri yüklenirken hata oluştu:', error)
       }
     }
 
-    // Sonra loadAllData fonksiyonunu tanımlayalım
+    // loadAllData fonksiyonuna fetchMonthData ekleyelim
     const loadAllData = async () => {
-      if (isLoading.value) return
-      
-      isLoading.value = true
       try {
+        const auth = getAuth()
+        if (!auth.currentUser) {
+          console.log('Kullanıcı girişi yapılmamış')
+          return
+        }
+
         await Promise.all([
-          fetchMonthData(),
-          store.dispatch('expenses/fetchExpenses', {
-            year: props.year,
-            month: props.month
-          }),
-          store.dispatch('income/fetchIncome', {
-            year: props.year,
-            month: props.month
-          }),
-          store.dispatch('bills/fetchBills', {
-            year: props.year,
-            month: props.month
-          }),
-          store.dispatch('debts/fetchDebts', {
-            year: props.year,
-            month: props.month
-          }),
-          store.dispatch('savings/fetchSavings', {
-            year: props.year,
-            month: props.month
-          })
+          fetchMonthData(), // Ay verilerini de yükle
+          store.dispatch('expenses/fetchExpenses', { year: props.year, month: props.month }),
+          store.dispatch('income/fetchIncome', { year: props.year, month: props.month }),
+          store.dispatch('bills/fetchBills', { year: props.year, month: props.month }),
+          store.dispatch('debts/fetchDebts', { year: props.year, month: props.month }),
+          store.dispatch('savings/fetchSavings', { year: props.year, month: props.month })
         ])
       } catch (error) {
         console.error('Veriler yüklenirken hata oluştu:', error)
-      } finally {
-        isLoading.value = false
       }
     }
 
-    // Watch yerine onMounted kullanarak başlangıç verilerini yükleyelim
+    // Auth state değişikliğini dinle
     onMounted(() => {
-      loadAllData()
+      const auth = getAuth()
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          loadAllData()
+        }
+      })
+
+      // Component unmount olduğunda listener'ı kaldır
+      onUnmounted(() => unsubscribe())
     })
 
     // Props değişikliklerini izleyelim

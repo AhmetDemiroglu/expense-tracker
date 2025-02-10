@@ -129,10 +129,13 @@ export default {
     })
 
     const dayExpenses = computed(() => {
-      return store.state.expenses.expenses.filter(expense => {
-        const cellDate = props.day.date
+      const expenses = store.state.expenses?.expenses || []
+      if (!expenses.length) return []
+
+      return expenses.filter(expense => {
+        if (!expense?.expenseDate) return false
         
-        // Harcamanın gerçek tarihine göre filtrele
+        const cellDate = props.day.date
         return expense.expenseDate.day === cellDate.getDate() &&
                expense.expenseDate.month === cellDate.getMonth() &&
                expense.expenseDate.year === cellDate.getFullYear()
