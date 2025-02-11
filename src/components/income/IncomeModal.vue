@@ -98,6 +98,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { expenseAPI } from '@/services/api'
 import ConfirmModalEdit from '../shared/ConfirmModalEdit.vue'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'IncomeModal',
@@ -107,13 +108,18 @@ export default {
   emits: ['close'],
   setup(props, { emit }) {
     const store = useStore()
+    const toast = useToast()
     const form = ref({
       salary: 0,
       rent: 0,
       other: 0
     })
-    const initialForm = ref({}) // Başlangıç değerlerini saklamak için
+    const initialForm = ref({})
     const showConfirmUpdate = ref(false)
+
+    // Seçili yıl ve ay bilgisini store'dan al
+    const selectedYear = computed(() => store.state.selectedYear)
+    const selectedMonth = computed(() => store.state.selectedMonth)
 
     const totalIncome = computed(() => {
       return Object.values(form.value).reduce((sum, val) => sum + Number(val), 0)
@@ -142,16 +148,18 @@ export default {
       try {
         for (const [type, amount] of Object.entries(form.value)) {
           await store.dispatch('income/updateIncome', {
-            year: store.state.selectedYear,
-            month: store.state.selectedMonth,
             type,
-            amount: Number(amount)
+            amount: Number(amount),
+            year: selectedYear.value,
+            month: selectedMonth.value 
           })
         }
         showConfirmUpdate.value = false
         emit('close')
+        toast.success('Gelir başarıyla güncellendi')
       } catch (error) {
         console.error('Gelir güncellenemedi:', error)
+        toast.error('Gelir güncellenemedi: ' + error.message)
       }
     }
 
@@ -167,11 +175,10 @@ export default {
     onMounted(async () => {
       try {
         const income = await expenseAPI.getMonthlyIncome(
-          store.state.selectedYear,
-          store.state.selectedMonth
+          selectedYear.value,
+          selectedMonth.value
         )
         
-        // Eğer veriler varsa formu güncelle
         if (income) {
           const formData = {
             salary: Number(income.salary) || 0,
@@ -179,7 +186,7 @@ export default {
             other: Number(income.other) || 0
           }
           form.value = { ...formData }
-          initialForm.value = { ...formData } // Başlangıç değerlerini sakla
+          initialForm.value = { ...formData }
         }
       } catch (error) {
         console.error('Gelir bilgileri yüklenemedi:', error)

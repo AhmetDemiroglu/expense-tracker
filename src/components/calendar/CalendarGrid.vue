@@ -147,13 +147,28 @@
             :key="day.date"
             class="grid-cell"
             :class="{
+              'current-month': day.isCurrentMonth,
+              'other-month': !day.isCurrentMonth,
               'today': isToday(day.date),
               'cutoff-date': isCutoffDate(day.date),
               'period-start': isPeriodStart(day.date),
               'period-active': isInPeriod(day.date),
-              'period-inactive': !isInPeriod(day.date)
+              'period-inactive': !isInPeriod(day.date),
+              'selected': isSelected(day.date)
             }"
+            @click="selectDate(day.date)"
           >
+            <div class="day-header">
+              <span class="day-number">{{ day.date.getDate() }}</span>
+              <div class="day-actions">
+                <button class="view-btn" @click.stop="openDetailsModal(day.date)">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="add-btn" @click.stop="openAddExpenseModal(day.date)">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+            </div>
             <DayCell 
               :day="day"
               :monthData="monthData"
@@ -219,10 +234,9 @@ import SavingsModal from '../savings/SavingsModal.vue'
 import ConfirmModal from '../shared/ConfirmModal.vue'
 import { expenseAPI } from '../../services/api'
 import html2pdf from 'html2pdf.js/dist/html2pdf.bundle.min'
-import { ref as dbRef, get } from 'firebase/database'
+import { ref as dbRef, get, set } from 'firebase/database'
 import { db } from '@/services/firebase'
-import { getAuth } from 'firebase/auth'
-import { onAuthStateChanged } from 'firebase/auth'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
 
 export default {
   name: 'CalendarGrid',
@@ -238,11 +252,11 @@ export default {
   },
   props: {
     year: {
-      type: [Number, String],
+      type: String,
       required: true
     },
     month: {
-      type: [Number, String],
+      type: String,
       required: true
     }
   },
@@ -256,30 +270,31 @@ export default {
     const showConfirmDelete = ref(false)
     const selectedDate = ref(null)
     const selectedExpenseId = ref(null)
+    const isLoading = ref(true)
+    const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
     const monthData = ref({
+      periodStartDate: null,
       cutoffDate: null,
-      periodStartDate: null
+      lastUpdated: null
     })
     const isEditingCutoff = ref(false)
     const isEditingPeriod = ref(false)
     const cutoffDateInput = ref('')
     const periodStartInput = ref('')
-    const isLoading = ref(false)
 
     const months = [
       'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
       'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
     ]
 
+    const currentMonth = computed(() => store.state.selectedMonth)
+    const currentYear = computed(() => store.state.selectedYear)
+
+    // Ay adını hesapla
     const monthName = computed(() => months[Number(props.month)])
 
-    // Seçili günün harcamalarını getir
-    const selectedDayExpenses = computed(() => {
-      if (!selectedDate.value) return []
-      return store.state.expenses.expenses.filter(expense => 
-        new Date(expense.date).toDateString() === selectedDate.value.toDateString()
-      )
-    })
+    // Yıl bilgisi
+    const year = computed(() => currentYear.value)
 
     // Ay içindeki günleri hesapla
     const monthDays = computed(() => {
@@ -300,7 +315,7 @@ export default {
           })
         }
       }
-      
+
       // Bu ayın günlerini ekle
       for (let i = 1; i <= lastDay.getDate(); i++) {
         days.push({
@@ -319,8 +334,16 @@ export default {
           })
         }
       }
-      
+
       return days
+    })
+
+    // Seçili günün harcamalarını getir
+    const selectedDayExpenses = computed(() => {
+      if (!selectedDate.value) return []
+      return store.state.expenses.expenses.filter(expense => 
+        new Date(expense.date).toDateString() === selectedDate.value.toDateString()
+      )
     })
 
     const openDetailsModal = (date) => {
@@ -358,68 +381,172 @@ export default {
       }
     }
 
-    // Önce fetchMonthData fonksiyonunu güncelleyelim
+    // Ay verilerini getir
     const fetchMonthData = async () => {
       try {
-        const data = await expenseAPI.getMonthSettings(props.year, props.month)
+        const auth = getAuth()
+        const user = auth.currentUser
+        if (!user) return
+
+        // Ay verilerini kullanıcının kendi path'inden al
+        const monthRef = dbRef(db, `users/${user.uid}/months/${store.state.selectedYear}/${store.state.selectedMonth}`)
+        const snapshot = await get(monthRef)
         
-        monthData.value = {
-          cutoffDate: data.cutoffDate,
-          periodStartDate: data.periodStartDate,
-          lastUpdated: data.lastUpdated
+        if (snapshot.exists()) {
+          monthData.value = snapshot.val()
+        } else {
+          monthData.value = {
+            periodStartDate: null,
+            cutoffDate: null,
+            lastUpdated: Date.now()
+          }
         }
 
-        if (data.cutoffDate) {
-          cutoffDateInput.value = new Date(data.cutoffDate).toISOString().split('T')[0]
+        // Input değerlerini güncelle
+        if (monthData.value.cutoffDate) {
+          cutoffDateInput.value = new Date(monthData.value.cutoffDate).toISOString().split('T')[0]
         }
-        if (data.periodStartDate) {
-          periodStartInput.value = new Date(data.periodStartDate).toISOString().split('T')[0]
+        if (monthData.value.periodStartDate) {
+          periodStartInput.value = new Date(monthData.value.periodStartDate).toISOString().split('T')[0]
         }
       } catch (error) {
-        console.error('Ay verileri yüklenirken hata oluştu:', error)
+        console.error('Ay verileri getirilemedi:', error)
       }
     }
 
-    // loadAllData fonksiyonuna fetchMonthData ekleyelim
-    const loadAllData = async () => {
+    // Ay verilerini kaydet
+    const saveMonthData = async (data) => {
       try {
         const auth = getAuth()
-        if (!auth.currentUser) {
-          console.log('Kullanıcı girişi yapılmamış')
-          return
-        }
+        const user = auth.currentUser
+        if (!user) return
 
+        const monthRef = dbRef(db, `users/${user.uid}/months/${store.state.selectedYear}/${store.state.selectedMonth}`)
+        await set(monthRef, {
+          ...data,
+          lastUpdated: Date.now()
+        })
+      } catch (error) {
+        console.error('Ay verileri kaydedilemedi:', error)
+      }
+    }
+
+    // Kesim tarihi güncelleme
+    const updateCutoffDate = async () => {
+      if (!cutoffDateInput.value) return
+
+      const timestamp = new Date(cutoffDateInput.value).getTime()
+      await saveMonthData({
+        ...monthData.value,
+        cutoffDate: timestamp
+      })
+      isEditingCutoff.value = false
+    }
+
+    // Dönem başlangıç tarihi güncelleme
+    const updatePeriodStartDate = async () => {
+      if (!periodStartInput.value) return
+
+      const timestamp = new Date(periodStartInput.value).getTime()
+      await saveMonthData({
+        ...monthData.value,
+        periodStartDate: timestamp
+      })
+      isEditingPeriod.value = false
+    }
+
+    // Ay değiştirme işlemi
+    const navigateMonth = async (direction) => {
+      if (isLoading.value) return
+      
+      isLoading.value = true
+      try {
+        const newDate = new Date(Number(props.year), Number(props.month) + direction, 1)
+        const newYear = newDate.getFullYear()
+        const newMonth = newDate.getMonth()
+
+        // Store'u güncelle
+        store.commit('SET_SELECTED_MONTH', newMonth)
+        store.commit('SET_SELECTED_YEAR', newYear)
+
+        // URL'i güncelle
+        router.push({
+          name: 'month-detail',
+          params: {
+            year: newYear.toString(),
+            month: newMonth.toString()
+          }
+        })
+
+        // Verileri yükle
+        await loadAllData()
+      } catch (error) {
+        console.error('Ay değiştirme hatası:', error)
+      } finally {
+        isLoading.value = false
+      }
+    }
+
+    // Tüm verileri yükle
+    const loadAllData = async () => {
+      if (!store.getters['auth/isAuthenticated']) {
+        isLoading.value = false
+        return
+      }
+
+      try {
+        isLoading.value = true
+        await fetchMonthData()
+        
         await Promise.all([
-          fetchMonthData(), // Ay verilerini de yükle
-          store.dispatch('expenses/fetchExpenses', { year: props.year, month: props.month }),
-          store.dispatch('income/fetchIncome', { year: props.year, month: props.month }),
-          store.dispatch('bills/fetchBills', { year: props.year, month: props.month }),
-          store.dispatch('debts/fetchDebts', { year: props.year, month: props.month }),
-          store.dispatch('savings/fetchSavings', { year: props.year, month: props.month })
+          store.dispatch('expenses/fetchExpenses', {
+            year: store.state.selectedYear,
+            month: store.state.selectedMonth
+          }),
+          store.dispatch('income/fetchIncome', {
+            year: store.state.selectedYear,
+            month: store.state.selectedMonth
+          }),
+          store.dispatch('bills/fetchBills', {
+            year: store.state.selectedYear,
+            month: store.state.selectedMonth
+          }),
+          store.dispatch('debts/fetchDebts', {
+            year: store.state.selectedYear,
+            month: store.state.selectedMonth
+          }),
+          store.dispatch('savings/fetchSavings', {
+            year: store.state.selectedYear,
+            month: store.state.selectedMonth
+          })
         ])
       } catch (error) {
         console.error('Veriler yüklenirken hata oluştu:', error)
+      } finally {
+        isLoading.value = false
       }
     }
 
-    // Auth state değişikliğini dinle
+    // Bileşen yüklendiğinde ve auth state değiştiğinde verileri getir
     onMounted(() => {
       const auth = getAuth()
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
+      onAuthStateChanged(auth, async (user) => {
         if (user) {
-          loadAllData()
+          await loadAllData()
         }
       })
-
-      // Component unmount olduğunda listener'ı kaldır
-      onUnmounted(() => unsubscribe())
     })
 
-    // Props değişikliklerini izleyelim
+    // Seçili ay/yıl değiştiğinde verileri yeniden yükle
     watch(
-      () => [props.year, props.month],
-      () => {
-        loadAllData()
+      [
+        () => store.state.selectedYear,
+        () => store.state.selectedMonth
+      ],
+      async () => {
+        if (store.getters['auth/isAuthenticated']) {
+          await loadAllData()
+        }
       }
     )
 
@@ -460,66 +587,69 @@ export default {
       return remainingBudget / diffDays
     })
 
-    // Hesap kesim tarihi kontrolü
-    const isCutoffDate = (date) => {
-      if (!monthData.value.cutoffDate) return false
-      const cutoffDate = new Date(monthData.value.cutoffDate)
-      return date.getDate() === cutoffDate.getDate() &&
-             date.getMonth() === cutoffDate.getMonth() &&
-             date.getFullYear() === cutoffDate.getFullYear()
+    // Gün seçme işlemi
+    const selectDate = (date) => {
+      selectedDate.value = date
     }
 
-    // Dönem başlangıç tarihi kontrolü
-    const isPeriodStart = (date) => {
-      if (!monthData.value.periodStartDate) return false
-      const startDate = new Date(monthData.value.periodStartDate)
-      return date.getDate() === startDate.getDate() &&
-             date.getMonth() === startDate.getMonth() &&
-             date.getFullYear() === startDate.getFullYear()
+    // Seçili gün kontrolü
+    const isSelected = (date) => {
+      if (!selectedDate.value || !date) return false
+      return date.toDateString() === selectedDate.value.toDateString()
     }
 
-    // Bugünün tarihi kontrolü
+    // Bugün kontrolü
     const isToday = (date) => {
+      if (!date) return false
       const today = new Date()
-      return date.getDate() === today.getDate() &&
-             date.getMonth() === today.getMonth() &&
-             date.getFullYear() === today.getFullYear()
+      return date.toDateString() === today.toDateString()
     }
 
-    // Dönem içi günleri kontrol et
+    // Dönem içi kontrolü
     const isInPeriod = (date) => {
-      if (!monthData.value.cutoffDate || !monthData.value.periodStartDate) return true
+      if (!date || !monthData.value.periodStartDate || !monthData.value.cutoffDate) return false
       
-      const checkDate = new Date(date)
-      const startDate = new Date(monthData.value.periodStartDate)
-      const endDate = new Date(monthData.value.cutoffDate)
-      
-      // Tarihleri karşılaştırmak için yıl-ay-gün formatına çevirelim
-      const normalizeDate = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-      
-      const checkTime = normalizeDate(checkDate)
-      const startTime = normalizeDate(startDate)
-      const endTime = normalizeDate(endDate)
+      const checkTime = new Date(date).setHours(0, 0, 0, 0)
+      const startTime = new Date(monthData.value.periodStartDate).setHours(0, 0, 0, 0)
+      const endTime = new Date(monthData.value.cutoffDate).setHours(0, 0, 0, 0)
 
-      // Eğer dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
+      // Dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
       if (startTime > endTime) {
         // Önceki ayın dönem başlangıcını hesapla
-        const prevMonthStart = new Date(startDate)
+        const prevMonthStart = new Date(startTime)
         prevMonthStart.setMonth(prevMonthStart.getMonth() - 1)
-        const prevStartTime = normalizeDate(prevMonthStart)
+        const prevStartTime = prevMonthStart.getTime()
 
         // Sonraki ayın kesim tarihini hesapla
-        const nextMonthEnd = new Date(endDate)
+        const nextMonthEnd = new Date(endTime)
         nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1)
-        const nextEndTime = normalizeDate(nextMonthEnd)
+        const nextEndTime = nextMonthEnd.getTime()
 
         // Tarih ya önceki dönemde ya da sonraki dönemde olmalı
+        // >= ve <= kullanarak başlangıç ve bitiş tarihlerini dahil ediyoruz
         return (checkTime >= prevStartTime && checkTime <= endTime) || 
                (checkTime >= startTime && checkTime <= nextEndTime)
       }
       
       // Normal durum - başlangıç ve bitiş aynı ayda
+      // >= ve <= kullanarak başlangıç ve bitiş tarihlerini dahil ediyoruz
       return checkTime >= startTime && checkTime <= endTime
+    }
+
+    // Kesim tarihi kontrolü
+    const isCutoffDate = (date) => {
+      if (!date || !monthData.value.cutoffDate) return false
+      const checkTime = new Date(date).setHours(0, 0, 0, 0)
+      const cutoffTime = new Date(monthData.value.cutoffDate).setHours(0, 0, 0, 0)
+      return checkTime === cutoffTime
+    }
+
+    // Dönem başlangıç tarihi kontrolü
+    const isPeriodStart = (date) => {
+      if (!date || !monthData.value.periodStartDate) return false
+      const checkTime = new Date(date).setHours(0, 0, 0, 0)
+      const startTime = new Date(monthData.value.periodStartDate).setHours(0, 0, 0, 0)
+      return checkTime === startTime
     }
 
     // Modal açma/kapama metodları
@@ -580,22 +710,41 @@ export default {
       }
     }
 
-    // Dönem içi toplam harcamalar
+    // Dönem içi harcamaları hesapla
     const totalPeriodExpenses = computed(() => {
+      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) return 0
+
       return store.state.expenses.expenses
         .filter(expense => {
-          const expenseDate = new Date(Number(expense.date))
-          return isInPeriod(expenseDate)
+          const expenseDate = new Date(expense.date)
+          const checkTime = expenseDate.setHours(0, 0, 0, 0)
+          const startTime = new Date(monthData.value.periodStartDate).setHours(0, 0, 0, 0)
+          const endTime = new Date(monthData.value.cutoffDate).setHours(0, 0, 0, 0)
+
+          // Dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
+          if (startTime > endTime) {
+            // Önceki ayın dönem başlangıcını hesapla
+            const prevMonthStart = new Date(startTime)
+            prevMonthStart.setMonth(prevMonthStart.getMonth() - 1)
+            const prevStartTime = prevMonthStart.getTime()
+
+            // Sonraki ayın kesim tarihini hesapla
+            const nextMonthEnd = new Date(endTime)
+            nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1)
+            const nextEndTime = nextMonthEnd.getTime()
+
+            // Tarih ya önceki dönemde ya da sonraki dönemde olmalı
+            return (checkTime >= prevStartTime && checkTime <= endTime) || 
+                   (checkTime >= startTime && checkTime <= nextEndTime)
+          }
+
+          // Normal durum - başlangıç ve bitiş aynı ayda
+          return checkTime >= startTime && checkTime <= endTime
         })
-        .reduce((total, expense) => total + expense.amount, 0)
+        .reduce((total, expense) => total + Number(expense.amount), 0)
     })
 
-    // Silme işlemleri için yeni metodlar
-    const confirmDelete = (expenseId) => {
-      selectedExpenseId.value = expenseId
-      showConfirmDelete.value = true
-    }
-
+    // Harcama silme işlemi
     const handleDelete = async () => {
       try {
         if (!selectedExpenseId.value) {
@@ -609,11 +758,11 @@ export default {
           return
         }
 
-        const expenseDate = new Date(Number(expense.date))
+        const expenseDate = new Date(expense.date)
         
         await store.dispatch('expenses/deleteExpense', {
-          year: expenseDate.getFullYear(),
-          month: expenseDate.getMonth(),
+          year: expenseDate.getFullYear().toString(),
+          month: expenseDate.getMonth().toString(),
           expenseId: selectedExpenseId.value
         })
 
@@ -635,53 +784,68 @@ export default {
       }
     }
 
+    // Silme onayı
+    const confirmDelete = (expenseId) => {
+      selectedExpenseId.value = expenseId
+      showConfirmDelete.value = true
+    }
+
     const exportToPDF = () => {
       const element = document.querySelector('.calendar-grid')
-      
-      // PDF için özel stil ekleyelim
-      const originalStyle = element.style.cssText
-      element.style.fontSize = '7px'
-      element.style.padding = '0.3rem'
-      
-      // Grid hücrelerinin yüksekliğini azaltalım
-      const cells = element.querySelectorAll('.grid-cell')
-      const originalCellStyles = []
-      cells.forEach(cell => {
-        originalCellStyles.push(cell.style.cssText)
-        cell.style.minHeight = '60px'
-        cell.style.padding = '0.2rem'
-      })
+      if (!element) return
+
+      // PDF için özel stil ekle
+      const pdfStyle = document.createElement('style')
+      pdfStyle.textContent = `
+        @media print {
+          .calendar-grid {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 10mm !important;
+          }
+          .grid-header, .grid-body {
+            font-size: 8pt !important;
+          }
+          .day-number {
+            font-size: 10pt !important;
+          }
+          .expense-summary {
+            font-size: 8pt !important;
+          }
+          .indicator {
+            font-size: 7pt !important;
+          }
+          .budget-warning,
+          .no-expense-info,
+          .budget-safe {
+            font-size: 7pt !important;
+            padding: 2px 4px !important;
+          }
+        }
+      `
+      document.head.appendChild(pdfStyle)
 
       const opt = {
-        margin: 0.2,
-        filename: `takvim-${props.year}-${props.month}.pdf`,
+        margin: 10,
+        filename: `takvim-${props.year}-${Number(props.month) + 1}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2,
-          useCORS: true,
           letterRendering: true,
-          width: 1200, // Yatay format için genişliği artırdık
-          height: 800 // Yatay format için yüksekliği artırdık
+          useCORS: true
         },
         jsPDF: { 
-          unit: 'in', 
+          unit: 'mm', 
           format: 'a4', 
-          orientation: 'landscape', // Yatay format
+          orientation: 'landscape',
           compress: true
-        }
+        },
+        pagebreak: { mode: 'avoid-all' } // Sayfa içi elementlerin bölünmesini önle
       }
-      
-      html2pdf()
-        .set(opt)
-        .from(element)
-        .save()
-        .then(() => {
-          // Orijinal stilleri geri yükleyelim
-          element.style.cssText = originalStyle
-          cells.forEach((cell, index) => {
-            cell.style.cssText = originalCellStyles[index]
-          })
-        })
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        document.head.removeChild(pdfStyle)
+      })
     }
 
     const printCalendar = () => {
@@ -724,24 +888,50 @@ export default {
 
               .grid-cell {
                 min-height: 120px;
-                border: 1px solid #dee2e6;
+                border: 1px solid #eee;
                 border-radius: 8px;
                 padding: 0.5rem;
+                position: relative;
+                background: white;
+                transition: all 0.2s ease;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+              }
+
+              .weekday {
+                text-align: center;
+                font-weight: 500;
+                color: #003B5C;
               }
 
               .day-number {
-                font-weight: 500;
-                color: #003B5C;
+                font-size: 0.9rem;
+                margin-bottom: 0.3rem;
               }
 
               .expense-summary {
-                text-align: right;
                 margin-top: auto;
+                font-size: 0.85rem;
+                line-height: 1.2;
               }
 
-              .total-expense {
-                font-weight: 500;
-                color: #003B5C;
+              .day-actions {
+                margin-top: 0.3rem;
+                gap: 0.3rem;
+              }
+
+              .budget-warning,
+              .no-expense-info,
+              .budget-safe {
+                padding: 0.3rem;
+                margin-top: 0.3rem;
+                font-size: 0.8rem;
+                line-height: 1.1;
+              }
+
+              .day-actions {
+                display: none;
               }
 
               .remaining-limit {
@@ -809,30 +999,6 @@ export default {
         WinPrint.print()
         WinPrint.close()
       }, 1500)
-    }
-
-    const navigateMonth = async (step) => {
-      if (isLoading.value) return // Eğer yükleme yapılıyorsa tıklamayı engelle
-      
-      const newDate = new Date(Number(props.year), Number(props.month) + step, 1)
-      const newYear = newDate.getFullYear()
-      const newMonth = newDate.getMonth()
-
-      // Önce store'u güncelle
-      store.commit('SET_SELECTED_YEAR', newYear)
-      store.commit('SET_SELECTED_MONTH', newMonth)
-      
-      // Verileri yüklemeye başla
-      await loadAllData()
-      
-      // Yönlendirmeyi yap
-      router.push({
-        name: 'month-detail',
-        params: {
-          year: newYear.toString(),
-          month: newMonth.toString()
-        }
-      })
     }
 
     // Modal açma/kapama metodları
@@ -906,6 +1072,7 @@ export default {
       closeAddExpenseModal,
       saveExpense,
       monthName,
+      year,
       showIncomeModal,
       showDebtsModal,
       showBillsModal,
@@ -946,7 +1113,9 @@ export default {
       exportToPDF,
       printCalendar,
       navigateMonth,
-      isLoading
+      isLoading,
+      selectDate,
+      isSelected
     }
   }
 }
@@ -1036,36 +1205,39 @@ export default {
   padding: 1.5rem;
   box-shadow: 0 4px 12px rgba(0, 59, 92, 0.1);
   margin-top: 2rem;
-  position: relative;
   width: 100%;
-  overflow: hidden;
+  box-sizing: border-box;
 }
 
-.grid-header {
+.grid-body-wrapper {
+  width: 100%;
+  height: auto;
+}
+
+.grid-header, .grid-body {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.grid-cell {
+  min-height: 120px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 0.5rem;
+  position: relative;
+  background: white;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .weekday {
   text-align: center;
   font-weight: 500;
   color: #003B5C;
-}
-
-.grid-body-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  width: 100%;
-  padding-bottom: 1rem;
-}
-
-.grid-body {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
-  gap: 0.5rem;
-  min-width: 840px;
 }
 
 .month-actions {
@@ -1200,86 +1372,13 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .calendar-container {
-    padding: 0.5rem;
-  }
-
-  .action-buttons-container {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .action-buttons,
-  .export-buttons {
-    flex-wrap: wrap;
-    width: 100%;
-    gap: 0.5rem;
-  }
-
-  .action-btn,
-  .export-btn {
-    flex: 1 1 calc(50% - 0.5rem);
-    min-width: 120px;
-    padding: 0.5rem;
-    font-size: 0.9rem;
-    justify-content: center;
-  }
-
-  .export-buttons {
-    justify-content: stretch;
-  }
-
-  .export-btn {
-    margin: 0;
-  }
-
-  .grid-header,
-  .grid-body {
-    gap: 0.25rem;
-  }
-
-  .grid-header-container {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .month-summary {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-    padding: 0.75rem;
-  }
-
-  .summary-divider {
-    width: 100%;
-    height: 1px;
-    margin: 0.5rem 0;
-  }
-
-  .period-settings {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
+  .grid-body-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
-  .date-setting {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-  
-  .date-input {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .grid-body {
-    grid-template-columns: repeat(7, 120px);
-  }
-
   .grid-cell {
-    min-height: 100px;
-    padding: 0.25rem;
+    min-width: 120px; /* Mobilde minimum genişlik */
   }
 }
 
@@ -1518,5 +1617,74 @@ export default {
 .nav-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* DayCell içeriği için yeni stiller */
+:deep(.day-cell) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+:deep(.expense-summary) {
+  margin-top: auto;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+:deep(.day-actions) {
+  margin-top: 0.3rem;
+  gap: 0.3rem;
+}
+
+:deep(.budget-warning),
+:deep(.no-expense-info),
+:deep(.budget-safe) {
+  padding: 0.3rem;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1.1;
+}
+
+.day-number {
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+}
+
+.day-header {
+  background-color: rgba(91, 145, 59, 0.1);
+  padding: 0.3rem;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #003B5C;
+}
+
+.day-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.view-btn,
+.add-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #003B5C;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.view-btn:hover,
+.add-btn:hover {
+  opacity: 1;
 }
 </style> 

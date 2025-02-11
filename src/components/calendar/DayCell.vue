@@ -1,7 +1,5 @@
 <template>
-  <div 
-    class="day-cell"
-  >
+  <div class="day-cell">
     <!-- Hesap kesim ve dönem başlangıç göstergeleri -->
     <div class="day-indicators" v-if="isCutoffDate || isPeriodStart">
       <span v-if="isCutoffDate" class="indicator cutoff">
@@ -13,28 +11,6 @@
     </div>
 
     <div class="day-content">
-      <div class="day-header">
-        <span class="day-number">{{ day.date.getDate() }}</span>
-        <div class="day-actions">
-          <button 
-            class="view-btn" 
-            @click="$emit('show-details', day.date)"
-            title="Harcamaları Görüntüle"
-            :disabled="!isInPeriod"
-          >
-            <i class="fas fa-eye"></i>
-          </button>
-          <button 
-            class="add-btn" 
-            @click="$emit('add-expense', day.date)"
-            title="Harcama Ekle"
-            :disabled="!isInPeriod"
-          >
-            <i class="fas fa-plus"></i>
-          </button>
-        </div>
-      </div>
-      
       <div class="expense-summary">
         <div class="total-expense">{{ formatCurrency(dayTotal) }}</div>
         <div 
@@ -202,84 +178,29 @@ export default {
 .day-cell {
   background: white;
   border-radius: 8px;
-  padding: 0.5rem;
+  padding: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
 }
 
-.different-month {
-  opacity: 0.5;
-}
-
 .day-indicators {
-  position: absolute;
-  top: 0.25rem;
-  left: 0.25rem;
-  right: 0.25rem;
+  position: relative;
+  padding: 0.25rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.7rem;
-  z-index: 1;
+  background-color: transparent;
+  border-bottom: none;
 }
 
 .day-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  padding-top: 1.75rem; /* Göstergeler için üstte boşluk azaltıldı */
-}
-
-.day-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.day-number {
-  font-weight: 500;
-  color: #003B5C;
-}
-
-.day-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.view-btn,
-.add-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem;
-  transition: all 0.2s ease;
-}
-
-.view-btn {
-  color: #009B9F;
-  opacity: 0.7;
-}
-
-.view-btn:hover {
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-.add-btn {
-  color: #00B2A9;
-}
-
-.add-btn:hover {
-  transform: scale(1.1);
-}
-
-.view-btn:disabled,
-.add-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-  pointer-events: none;
+  padding: 0.5rem;
 }
 
 .expense-summary {
@@ -359,17 +280,26 @@ export default {
   border-radius: 4px;
   font-weight: 600;
   text-align: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
 }
 
-.cutoff {
-  background-color: rgba(220, 53, 69, 0.1);
+.indicator.cutoff {
+  background-color: rgba(220, 53, 69, 0.15);
   color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.2);
 }
 
-.period-start {
-  background-color: rgba(0, 178, 169, 0.1);
+.indicator.period-start {
+  background-color: rgba(0, 178, 169, 0.15);
   color: #00B2A9;
+  border: 1px solid rgba(0, 178, 169, 0.2);
+}
+
+.indicator:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
 .budget-warning,

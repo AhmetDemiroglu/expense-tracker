@@ -1,4 +1,7 @@
 import { expenseAPI } from '@/services/api'
+import { getAuth } from 'firebase/auth'
+import { ref, remove } from 'firebase/database'
+import { db } from '@/services/firebase'
 
 export default {
   namespaced: true,
@@ -20,8 +23,11 @@ export default {
         state.expenses[index] = { ...expense, id }
       }
     },
-    DELETE_EXPENSE(state, id) {
-      state.expenses = state.expenses.filter(e => e.id !== id)
+    DELETE_EXPENSE(state, expenseId) {
+      state.expenses = state.expenses.filter(expense => expense.id !== expenseId)
+    },
+    CLEAR_EXPENSES(state) {
+      state.expenses = []
     },
     SET_LOADING(state, loading) {
       state.loading = loading
@@ -66,17 +72,24 @@ export default {
         throw error
       }
     },
-    async deleteExpense({ commit }, { year, month, expenseId }) {
+    async deleteExpense({ commit, rootState }, { year, month, expenseId }) {
       try {
-        if (!year || !Number.isInteger(month) || !expenseId) {
+        if (!year || !month || !expenseId) {
           throw new Error('Geçersiz silme parametreleri')
         }
-        
-        await expenseAPI.deleteExpense(year, month, expenseId)
+
+        const auth = getAuth()
+        const user = auth.currentUser
+        if (!user) throw new Error('Kullanıcı girişi yapılmamış')
+
+        // Firebase'den silme
+        const expenseRef = ref(db, `users/${user.uid}/expenses/${year}/${month}/${expenseId}`)
+        await remove(expenseRef)
+
+        // Store'dan silme
         commit('DELETE_EXPENSE', expenseId)
-        return true
       } catch (error) {
-        commit('SET_ERROR', error.message)
+        console.error('Harcama silinirken hata oluştu:', error)
         throw error
       }
     }

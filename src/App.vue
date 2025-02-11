@@ -11,9 +11,9 @@
 </template>
 
 <script>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useStore } from 'vuex'
-import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import Header from './components/layout/Header.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 
@@ -25,37 +25,34 @@ export default {
   },
   setup() {
     const store = useStore()
+    const authInitialized = ref(false)
     
     onMounted(() => {
       const auth = getAuth()
-      let isInitialLoad = true
-
-      // Persistence ayarı
-      setPersistence(auth, browserLocalPersistence)
-        .then(() => {
-          onAuthStateChanged(auth, async (user) => {
-            try {
-              if (isInitialLoad) {
-                isInitialLoad = false
-                if (user) {
-                  await store.dispatch('auth/handleAuthStateChange', user)
-                }
-                return
-              }
-
-              await store.dispatch('auth/handleAuthStateChange', user)
-            } catch (error) {
-              console.error('Auth state handling error:', error)
-            }
-          })
-        })
-        .catch((error) => {
-          console.error('Auth persistence error:', error)
-        })
+      
+      onAuthStateChanged(auth, async (user) => {
+        try {
+          if (user) {
+            await store.dispatch('auth/handleAuthStateChange', user)
+          } else {
+            store.commit('auth/CLEAR_USER')
+            store.commit('expenses/CLEAR_EXPENSES')
+            store.commit('income/CLEAR_INCOME')
+            store.commit('bills/CLEAR_BILLS')
+            store.commit('debts/CLEAR_DEBTS')
+            store.commit('savings/CLEAR_SAVINGS')
+          }
+        } catch (error) {
+          console.error('Auth state handling error:', error)
+        } finally {
+          authInitialized.value = true
+        }
+      })
     })
 
     return {
       isSidebarOpen: false,
+      authInitialized,
       toggleSidebar() {
         this.isSidebarOpen = !this.isSidebarOpen
       }

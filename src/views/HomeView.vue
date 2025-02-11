@@ -61,10 +61,61 @@ import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
 import { expenseAPI } from '@/services/api'
 
-const router = useRouter()
 const store = useStore()
+const router = useRouter()
 const selectedMonth = ref(new Date().getMonth())
 const selectedYear = ref(new Date().getFullYear())
+
+// Auth state'ini izle
+const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
+
+// Veri yükleme fonksiyonu
+const loadData = async () => {
+  if (!isAuthenticated.value) return
+
+  try {
+    await Promise.all([
+      store.dispatch('income/fetchIncome', {
+        year: selectedYear.value,
+        month: selectedMonth.value 
+      }),
+      store.dispatch('debts/fetchDebts', {
+        year: selectedYear.value,
+        month: selectedMonth.value 
+      }),
+      store.dispatch('bills/fetchBills', {
+        year: selectedYear.value,
+        month: selectedMonth.value 
+      }),
+      store.dispatch('savings/fetchSavings', {
+        year: selectedYear.value,
+        month: selectedMonth.value 
+      })
+    ])
+  } catch (error) {
+    console.error('Veriler yüklenirken hata oluştu:', error)
+  }
+}
+
+// Auth state değiştiğinde verileri yükle
+watch(isAuthenticated, (newValue) => {
+  if (newValue) {
+    loadData()
+  }
+})
+
+// Ay veya yıl değiştiğinde verileri yükle
+watch([selectedMonth, selectedYear], () => {
+  if (isAuthenticated.value) {
+    loadData()
+  }
+})
+
+onMounted(() => {
+  if (isAuthenticated.value) {
+    loadData()
+  }
+})
 
 const selectedPeriod = computed(() => {
   const periodMonth = selectedMonth.value === 11 ? 0 : selectedMonth.value + 1
@@ -173,55 +224,6 @@ const remainingLimitClass = computed(() => {
     'positive': remainingLimit.value > 0,
     'negative': remainingLimit.value < 0
   }
-})
-
-const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
-
-onMounted(async () => {
-  try {
-    await Promise.all([
-      store.dispatch('income/fetchIncome', {
-        year: selectedYear.value,
-        month: selectedMonth.value
-      }),
-      store.dispatch('debts/fetchDebts', {
-        year: selectedYear.value,
-        month: selectedMonth.value
-      }),
-      store.dispatch('bills/fetchBills', {
-        year: selectedYear.value,
-        month: selectedMonth.value
-      }),
-      store.dispatch('savings/fetchSavings', {
-        year: selectedYear.value,
-        month: selectedMonth.value
-      })
-    ])
-  } catch (error) {
-    console.error('Veriler yüklenirken hata oluştu:', error)
-  }
-})
-
-// Ay veya yıl değiştiğinde verileri yeniden yükle
-watch([selectedMonth, selectedYear], async () => {
-  await Promise.all([
-    store.dispatch('income/fetchIncome', {
-      year: selectedYear.value,
-      month: selectedMonth.value
-    }),
-    store.dispatch('debts/fetchDebts', {
-      year: selectedYear.value,
-      month: selectedMonth.value
-    }),
-    store.dispatch('bills/fetchBills', {
-      year: selectedYear.value,
-      month: selectedMonth.value
-    }),
-    store.dispatch('savings/fetchSavings', {
-      year: selectedYear.value,
-      month: selectedMonth.value
-    })
-  ])
 })
 </script>
 
