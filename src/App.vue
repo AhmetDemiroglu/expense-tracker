@@ -1,12 +1,26 @@
 <template>
   <div id="app">
-    <Header @toggle-sidebar="toggleSidebar" />
+    <Header 
+      @toggle-sidebar="toggleSidebar"
+      @show-auth-modal="showAuthModal" 
+    />
     <div class="main-container">
-      <Sidebar :is-mobile-open="isSidebarOpen" />
-      <main class="content">
+      <Sidebar 
+        :is-mobile-open="isSidebarOpen" 
+        @close="closeSidebar"
+        @show-auth-modal="showAuthModal"
+      />
+      <main class="content" :class="{ 'sidebar-open': isSidebarOpen }">
         <router-view></router-view>
       </main>
     </div>
+
+    <!-- Auth Modal'ı buraya taşıdık -->
+    <AuthModal 
+      v-if="authModalVisible"
+      :mode="authModalMode"
+      @close="closeAuthModal"
+    />
   </div>
 </template>
 
@@ -16,16 +30,21 @@ import { useStore } from 'vuex'
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import Header from './components/layout/Header.vue'
 import Sidebar from './components/layout/Sidebar.vue'
+import AuthModal from '@/components/auth/AuthModal.vue'
 
 export default {
   name: 'App',
   components: {
     Header,
-    Sidebar
+    Sidebar,
+    AuthModal
   },
   setup() {
     const store = useStore()
     const authInitialized = ref(false)
+    const isSidebarOpen = ref(false)
+    const authModalVisible = ref(false)
+    const authModalMode = ref('login')
     
     onMounted(() => {
       const auth = getAuth()
@@ -50,12 +69,36 @@ export default {
       })
     })
 
-    return {
-      isSidebarOpen: false,
-      authInitialized,
-      toggleSidebar() {
-        this.isSidebarOpen = !this.isSidebarOpen
+    const showAuthModal = ({ mode }) => {
+      authModalMode.value = mode
+      authModalVisible.value = true
+      // Mobile'da sidebar'ı kapat
+      if (window.innerWidth <= 768) {
+        isSidebarOpen.value = false
       }
+    }
+
+    const closeAuthModal = () => {
+      authModalVisible.value = false
+    }
+
+    const toggleSidebar = () => {
+      isSidebarOpen.value = !isSidebarOpen.value
+    }
+
+    const closeSidebar = () => {
+      isSidebarOpen.value = false
+    }
+
+    return {
+      isSidebarOpen,
+      authInitialized,
+      authModalVisible,
+      authModalMode,
+      toggleSidebar,
+      closeSidebar,
+      showAuthModal,
+      closeAuthModal
     }
   }
 }
@@ -91,8 +134,19 @@ export default {
     overflow: hidden;
     position: relative;
   }
+  
   .content {
-    padding-top: 1rem;
+    padding: 1rem;
+    transition: transform 0.3s ease;
   }
+
+  .content.sidebar-open {
+    transform: translateX(280px);
+  }
+}
+
+/* Modal için yeni stil */
+.modal-overlay {
+  z-index: 2000 !important; /* Sidebar'ın üstünde görünmesi için */
 }
 </style> 

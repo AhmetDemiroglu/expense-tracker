@@ -18,7 +18,8 @@
       </router-link>
     </div>
     
-    <div class="header-right">
+    <!-- Desktop için auth butonları -->
+    <div class="header-right desktop-only">
       <template v-if="!isAuthenticated">
         <div class="auth-warning">
           <i class="fas fa-exclamation-circle"></i>
@@ -47,14 +48,14 @@
         </button>
       </div>
     </div>
-
-    <!-- Auth Modalları -->
-    <AuthModal 
-      v-if="showAuthModal"
-      :mode="authMode"
-      @close="closeAuthModal"
-    />
   </header>
+
+  <!-- Auth Modalları -->
+  <AuthModal 
+    v-if="showAuthModal"
+    :mode="authMode"
+    @close="closeAuthModal"
+  />
 </template>
 
 <script>
@@ -67,8 +68,8 @@ export default {
   components: {
     AuthModal
   },
-  emits: ['toggle-sidebar'],
-  setup() {
+  emits: ['toggle-sidebar', 'show-auth-modal'],
+  setup(props, { emit }) {
     const store = useStore()
     const showAuthModal = ref(false)
     const authMode = ref('login') // 'login' veya 'register'
@@ -79,13 +80,11 @@ export default {
     const userName = computed(() => store.getters['auth/userName'])
 
     const openLoginModal = () => {
-      authMode.value = 'login'
-      showAuthModal.value = true
+      emit('show-auth-modal', { mode: 'login' })
     }
 
     const openRegisterModal = () => {
-      authMode.value = 'register'
-      showAuthModal.value = true
+      emit('show-auth-modal', { mode: 'register' })
     }
 
     const closeAuthModal = () => {
@@ -100,6 +99,10 @@ export default {
       }
     }
 
+    const toggleSidebar = () => {
+      emit('toggle-sidebar')
+    }
+
     return {
       isAuthenticated,
       user,
@@ -110,7 +113,8 @@ export default {
       openRegisterModal,
       closeAuthModal,
       handleLogout,
-      userName
+      userName,
+      toggleSidebar
     }
   }
 }
@@ -161,10 +165,10 @@ export default {
   display: none;
   background: none;
   border: none;
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   cursor: pointer;
   padding: 0.5rem;
-  color: #FFFFFF;
+  color: #003B5C;
   transition: color 0.2s ease;
 }
 
@@ -311,5 +315,29 @@ export default {
 
 .user-name:hover {
   color: #00B2A9;
+}
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+  
+  .header {
+    padding: 1rem;
+  }
+
+  .brand-name {
+    font-size: 1.25rem;
+  }
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block;
+  }
 }
 </style> 

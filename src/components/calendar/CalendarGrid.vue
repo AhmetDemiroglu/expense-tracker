@@ -1372,13 +1372,145 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .calendar-container {
+    padding: 0.5rem;
+    margin-top: 1rem;
+  }
+
   .grid-body-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
   }
-  
+
+  .grid-body-wrapper::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  .grid-body {
+    min-width: max-content;
+    gap: 0.25rem;
+  }
+
   .grid-cell {
-    min-width: 120px; /* Mobilde minimum genişlik */
+    min-width: 120px;
+  }
+
+  .month-actions {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .action-buttons-container {
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .action-btn {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    justify-content: center;
+  }
+
+  .export-buttons {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 59, 92, 0.1);
+  }
+
+  .export-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.75rem;
+  }
+
+  .period-settings {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 178, 169, 0.05);
+    border-radius: 12px;
+  }
+
+  .date-setting {
+    width: 100%;
+  }
+
+  .month-summary {
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1rem;
+    background: rgba(0, 59, 92, 0.05);
+    border-radius: 12px;
+    gap: 0.75rem;
+  }
+
+  .summary-item {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 59, 92, 0.1);
+  }
+
+  .summary-item .label {
+    color: #666;
+    font-size: 0.9rem;
+  }
+
+  .summary-item .amount {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .summary-divider {
+    display: none;
+  }
+
+  .summary-item:last-child {
+    background: rgba(0, 178, 169, 0.05);
+    border: 1px solid rgba(0, 178, 169, 0.1);
+  }
+
+  .grid-header-container {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .month-title {
+    width: 100%;
+  }
+
+  .month-navigation {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .back-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem;
+    background: rgba(0, 59, 92, 0.05);
+    border-radius: 8px;
   }
 }
 
