@@ -1,5 +1,17 @@
 <template>
   <div id="app">
+    <!-- Email doğrulama uyarısı -->
+    <div v-if="showEmailWarning" class="email-verification-warning">
+      <div class="warning-content">
+        <i class="fas fa-exclamation-circle"></i>
+        <span>Email adresinizi doğrulamadan tüm özellikleri kullanamazsınız</span>
+        <button @click="resendVerificationEmail" class="resend-btn">
+          <i class="fas fa-paper-plane"></i>
+          Tekrar Gönder
+        </button>
+      </div>
+    </div>
+
     <Header 
       @toggle-sidebar="toggleSidebar"
       @show-auth-modal="showAuthModal" 
@@ -25,7 +37,7 @@
 </template>
 
 <script>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useStore } from 'vuex'
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import Header from './components/layout/Header.vue'
@@ -90,6 +102,18 @@ export default {
       isSidebarOpen.value = false
     }
 
+    const showEmailWarning = computed(() => {
+      return store.getters['auth/isAuthenticated'] && 
+             !store.getters['auth/isEmailVerified']
+    })
+
+    const resendVerificationEmail = async () => {
+      const result = await store.dispatch('auth/resendVerificationEmail')
+      if (result.success) {
+        // Başarılı mesajı göster
+      }
+    }
+
     return {
       isSidebarOpen,
       authInitialized,
@@ -98,7 +122,9 @@ export default {
       toggleSidebar,
       closeSidebar,
       showAuthModal,
-      closeAuthModal
+      closeAuthModal,
+      showEmailWarning,
+      resendVerificationEmail
     }
   }
 }
@@ -148,5 +174,52 @@ export default {
 /* Modal için yeni stil */
 .modal-overlay {
   z-index: 2000 !important; /* Sidebar'ın üstünde görünmesi için */
+}
+
+.email-verification-warning {
+  background-color: rgba(255, 193, 7, 0.1);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.warning-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: #856404;
+}
+
+.resend-btn {
+  margin-left: auto;
+  padding: 0.5rem 1rem;
+  background: #ffc107;
+  border: none;
+  border-radius: 8px;
+  color: #000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.resend-btn:hover {
+  background: #e0a800;
+}
+
+@media (max-width: 768px) {
+  .warning-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+  }
+
+  .resend-btn {
+    margin: 0;
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style> 

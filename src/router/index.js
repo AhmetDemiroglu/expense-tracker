@@ -16,7 +16,11 @@ const router = createRouter({
     {
       path: '/calendar',
       name: 'calendar',
-      component: CalendarView
+      component: CalendarView,
+      meta: { 
+        requiresAuth: true,
+        requiresVerification: true
+      }
     },
     {
       path: '/month/:year/:month',
@@ -32,6 +36,24 @@ const router = createRouter({
     }
   ]
 })
+
+const requireAuth = async (to, from, next) => {
+  const auth = getAuth()
+  const user = auth.currentUser
+
+  if (!user) {
+    next({ name: 'login' })
+    return
+  }
+
+  // Email doğrulama kontrolü
+  if (!user.emailVerified && to.meta.requiresVerification) {
+    next({ name: 'home' })
+    return
+  }
+
+  next()
+}
 
 router.beforeEach((to, from, next) => {
   const auth = getAuth()

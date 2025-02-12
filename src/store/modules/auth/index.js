@@ -1,5 +1,5 @@
 import { expenseAPI } from '@/services/api'
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, updatePassword } from 'firebase/auth'
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, updatePassword, sendEmailVerification } from 'firebase/auth'
 import { ref, get, set, serverTimestamp, update } from 'firebase/database'
 import { db } from '@/services/firebase'
 
@@ -10,13 +10,17 @@ export default {
     user: null,
     loading: false,
     error: null,
-    isAuthenticated: false
+    isAuthenticated: false,
+    isEmailVerified: false,
+    authMessage: null,
+    authWarning: null
   },
 
   mutations: {
     SET_USER(state, user) {
       state.user = user ? { ...user } : null
       state.isAuthenticated = !!user
+      state.isEmailVerified = user ? user.emailVerified : false
     },
     SET_LOADING(state, loading) {
       state.loading = loading
@@ -27,6 +31,16 @@ export default {
     CLEAR_USER(state) {
       state.user = null
       state.isAuthenticated = false
+      state.isEmailVerified = false
+    },
+    SET_EMAIL_VERIFIED(state, status) {
+      state.isEmailVerified = status
+    },
+    SET_AUTH_MESSAGE(state, message) {
+      state.authMessage = message
+    },
+    SET_AUTH_WARNING(state, warning) {
+      state.authWarning = warning
     }
   },
 
@@ -38,6 +52,9 @@ export default {
         
         // Kullanıcı profilini güncelle
         await updateProfile(userCredential.user, { displayName })
+        
+        // Email doğrulama gönder
+        await sendEmailVerification(userCredential.user)
         
         // Veritabanına kullanıcı kaydı ekle
         const userRef = ref(db, `users/${userCredential.user.uid}`)
@@ -85,7 +102,8 @@ export default {
         // Otomatik login yapılmasın diye çıkış yap
         await auth.signOut()
         
-        return userCredential.user
+        commit('SET_AUTH_MESSAGE', 'Kayıt başarılı! Lütfen email adresinizi doğrulayın.')
+        return { success: true }
       } catch (error) {
         let errorMessage = 'Kayıt yapılırken bir hata oluştu.'
         
@@ -105,7 +123,7 @@ export default {
         }
 
         console.error('Kayıt yapılamadı:', error)
-        throw new Error(errorMessage)
+        return { success: false, error: errorMessage }
       }
     },
 
@@ -215,40 +233,20 @@ export default {
     async handleAuthStateChange({ commit, dispatch }, user) {
       try {
         if (user) {
-          // Kullanıcı bilgilerini veritabanından al
-          const userRef = ref(db, `users/${user.uid}`)
-          const snapshot = await get(userRef)
+          // Kullanıcı bilgilerini yenile
+          await user.reload()
+          commit('SET_USER', user)
           
-          if (snapshot.exists()) {
-            const userData = snapshot.val()
-            
-            // User state'i güncelle
-            commit('SET_USER', {
-              ...user,
-              ...userData
-            })
-
-            // Store'ları başlat
-            const year = new Date().getFullYear()
-            const month = new Date().getMonth() + 1
-
-            // Income verilerini al ve store'a kaydet
-            const incomeRef = ref(db, `users/${user.uid}/income/${year}/${month}`)
-            const incomeSnapshot = await get(incomeRef)
-            if (incomeSnapshot.exists()) {
-              commit('income/SET_INCOME', incomeSnapshot.val(), { root: true })
-            } else {
-              commit('income/CLEAR_INCOME', null, { root: true })
-            }
+          // Email doğrulama durumunu kontrol et
+          if (!user.emailVerified) {
+            commit('SET_AUTH_WARNING', 'Lütfen email adresinizi doğrulayın')
           }
         } else {
           commit('CLEAR_USER')
-          commit('income/CLEAR_INCOME', null, { root: true })
         }
       } catch (error) {
         console.error('Auth state handling error:', error)
         commit('CLEAR_USER')
-        commit('income/CLEAR_INCOME', null, { root: true })
       }
     },
 
@@ -293,12 +291,30 @@ export default {
         console.error('Profil güncellenemedi:', error)
         throw new Error('Profil güncellenirken bir hata oluştu')
       }
+    },
+
+    async resendVerificationEmail({ commit }) {
+      try {
+        const auth = getAuth()
+        const user = auth.currentUser
+        if (user && !user.emailVerified) {
+          await sendEmailVerification(user)
+          commit('SET_AUTH_MESSAGE', 'Doğrulama maili tekrar gönderildi')
+          return { success: true }
+        }
+      } catch (error) {
+        console.error('Mail gönderme hatası:', error)
+        return { success: false, error: error.message }
+      }
     }
   },
 
   getters: {
     isAuthenticated: state => state.isAuthenticated,
     currentUser: state => state.user,
-    userName: state => state.user?.displayName || 'Kullanıcı'
+    userName: state => state.user?.displayName || 'Kullanıcı',
+    isEmailVerified: state => state.isEmailVerified,
+    authMessage: state => state.authMessage,
+    authWarning: state => state.authWarning
   }
 } 
