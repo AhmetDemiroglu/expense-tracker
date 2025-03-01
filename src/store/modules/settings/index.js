@@ -4,7 +4,7 @@ export default {
   namespaced: true,
   
   state: {
-    cutoffDate: 1
+    cutoffDate: 28 // Varsayılan olarak her ayın 28'i
   },
 
   mutations: {
@@ -53,27 +53,16 @@ export default {
     getMonthRange: (state) => (year, month) => {
       const cutoffDate = state.cutoffDate
       
-      // Başlangıç: Önceki ayın kesim tarihinin ertesi günü
-      let startDate = new Date(year, month - 1, cutoffDate + 1)
+      // Başlangıç: Seçilen ayın 1. günü
+      const startDate = new Date(year, month, 1)
+      startDate.setHours(0, 0, 0, 0)
       
-      // Önceki ayın son gününü kontrol et
-      const prevMonthLastDay = new Date(year, month - 1, 0).getDate()
+      // Bitiş: Seçilen ayın kesim tarihi veya ayın son günü
+      const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+      const endDay = Math.min(cutoffDate, lastDayOfMonth)
       
-      // Eğer kesim tarihi önceki ayın son gününden büyükse
-      if (cutoffDate > prevMonthLastDay) {
-        // Başlangıç tarihi bir sonraki ayın 1'i olacak
-        startDate = new Date(year, month, 1)
-      }
-      
-      // Bitiş: Seçilen ayın kesim tarihi
-      let endDate = new Date(year, month, cutoffDate)
-      
-      // Eğer kesim tarihi seçili ayın son gününden büyükse
-      const currentMonthLastDay = new Date(year, month + 1, 0).getDate()
-      if (cutoffDate > currentMonthLastDay) {
-        // Bitiş tarihi ayın son günü olacak
-        endDate = new Date(year, month, currentMonthLastDay)
-      }
+      const endDate = new Date(year, month, endDay)
+      endDate.setHours(23, 59, 59, 999)
       
       return {
         start: startDate,
@@ -81,4 +70,4 @@ export default {
       }
     }
   }
-} 
+}

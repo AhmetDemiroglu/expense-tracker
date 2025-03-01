@@ -21,7 +21,7 @@
           <h3>{{ months[selectedMonth] }} Dönemi</h3>
           <div class="amount negative">{{ formatCurrency(totalExpenses) }}</div>
           <div class="period-info">
-            {{ months[(selectedMonth - 1 + 12) % 12] }} sonundan {{ months[selectedMonth] }} sonuna kadar
+            {{ formatPeriodDates }}
           </div>
         </div>
 
@@ -37,7 +37,7 @@
           <h3>Dönem Bitimine Kalan</h3>
           <div class="days">{{ remainingDays }} gün</div>
           <div class="period-info">
-            {{ months[selectedMonth] }} ayı sonuna kadar
+            {{ remainingDayInfo }}
           </div>
         </div>
       </div>
@@ -68,6 +68,17 @@ const selectedYear = ref(new Date().getFullYear())
 
 // Auth state'ini izle
 const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
+
+// Kesim tarihini yükle
+onMounted(async () => {
+  if (isAuthenticated.value) {
+    try {
+      await store.dispatch('settings/fetchCutoffDate')
+    } catch (error) {
+      console.error('Kesim tarihi yüklenemedi:', error)
+    }
+  }
+})
 
 // Veri yükleme fonksiyonu
 const loadData = async () => {
@@ -143,35 +154,129 @@ const years = computed(() => {
   return [currentYear - 1, currentYear, currentYear + 1]
 })
 
+// Dönem tarihlerini formatla
+const formatPeriodDates = computed(() => {
+  if (!isAuthenticated.value) return ''
+  
+  const periodDates = store.getters['settings/getMonthRange'](selectedYear.value, selectedMonth.value)
+  if (!periodDates || !periodDates.start || !periodDates.end) return ''
+  
+  // Tarihleri doğru sırayla göster (küçükten büyüğe)
+  const startDate = new Date(periodDates.start)
+  const endDate = new Date(periodDates.end)
+  
+  const startDay = startDate.getDate()
+  const endDay = endDate.getDate()
+  const startMonth = startDate.getMonth()
+  const endMonth = endDate.getMonth()
+  
+  // Eğer başlangıç ve bitiş ayları farklıysa, ay isimlerini de ekle
+  if (startMonth !== endMonth) {
+    return `${startDay} ${months[startMonth]} - ${endDay} ${months[endMonth]} arası`
+  }
+  
+  // Aynı ay içindeyse sadece günleri göster
+  return `${startDay} - ${endDay} ${months[endMonth]} arası`
+})
+
 const remainingDays = computed(() => {
+  // Bugünün başlangıcını al (saat 00:00:00)
   const today = new Date()
-  const currentMonth = today.getMonth()
-  const currentYear = today.getFullYear()
+  today.setHours(0, 0, 0, 0)
   
   // Seçili ay ve yıl
   const selectedMonthValue = selectedMonth.value
   const selectedYearValue = selectedYear.value
   
-  // Geçmiş yıl seçilmişse 0 döndür
-  if (selectedYearValue < currentYear) {
-    return 0
+  // Seçilen ayın dönem tarihlerini al
+  const periodDates = store.getters['settings/getMonthRange'](selectedYearValue, selectedMonthValue)
+  if (!periodDates || !periodDates.start || !periodDates.end) return 0
+  
+  const startDate = new Date(periodDates.start)
+  const endDate = new Date(periodDates.end)
+  
+  // Başlangıç tarihini günün başına ayarla
+  startDate.setHours(0, 0, 0, 0)
+  
+  // Bugünün yıl ve ay bilgilerini al
+  const currentYear = today.getFullYear()
+  const currentMonth = today.getMonth()
+  
+  // Seçilen ay bugünden önceki bir ay ise
+  if (selectedYearValue < currentYear || 
+      (selectedYearValue === currentYear && selectedMonthValue < currentMonth)) {
+    return 0 // Dönem sona ermiş
   }
   
-  // Geçmiş ay seçilmişse 0 döndür
-  if (selectedYearValue === currentYear && selectedMonthValue < currentMonth) {
-    return 0
-  }
-  
-  // Seçili ay bu ay ise kalan günleri hesapla
+  // Seçilen ay bugünün ayı ise
   if (selectedYearValue === currentYear && selectedMonthValue === currentMonth) {
-    const lastDay = new Date(currentYear, currentMonth + 1, 0)
-    const diffTime = Math.abs(lastDay - today)
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+    // Eğer bugün bitiş tarihinden sonra ise dönem bitmiş demektir
+    if (today > endDate) {
+      return 0
+    }
+    
+    // Bitiş tarihine kalan günleri hesapla
+    const diffTime = Math.abs(endDate - today)
+    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // Eğer bugün bitiş tarihiyle aynı günse, 1 gün kalmış demektir
+    if (daysLeft === 0) {
+      return 1
+    }
+    
+    return daysLeft
   }
   
-  // Gelecek ay seçilmişse ayın toplam gün sayısını döndür
-  const lastDay = new Date(selectedYearValue, selectedMonthValue + 1, 0)
-  return lastDay.getDate()
+  // Seçilen ay gelecekteki bir ay ise
+  // Bugünden seçilen ayın başlangıcına kadar olan gün sayısını hesapla
+  const diffTime = Math.abs(startDate - today)
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+})
+
+const remainingDayInfo = computed(() => {
+  if (!isAuthenticated.value) return ''
+  
+  // Bugünün başlangıcını al (saat 00:00:00)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  // Bugünün yıl ve ay bilgilerini al
+  const currentYear = today.getFullYear()
+  const currentMonth = today.getMonth()
+  
+  // Seçili ay ve yıl
+  const selectedMonthValue = selectedMonth.value
+  const selectedYearValue = selectedYear.value
+  
+  // Seçilen ayın dönem tarihlerini al
+  const periodDates = store.getters['settings/getMonthRange'](selectedYearValue, selectedMonthValue)
+  if (!periodDates || !periodDates.start || !periodDates.end) return ''
+  
+  const startDate = new Date(periodDates.start)
+  const endDate = new Date(periodDates.end)
+  
+  // Başlangıç tarihini günün başına ayarla
+  startDate.setHours(0, 0, 0, 0)
+  
+  // Seçilen ay bugünden önceki bir ay ise
+  if (selectedYearValue < currentYear || 
+      (selectedYearValue === currentYear && selectedMonthValue < currentMonth)) {
+    return 'Dönem sona erdi'
+  }
+  
+  // Seçilen ay bugünün ayı ise
+  if (selectedYearValue === currentYear && selectedMonthValue === currentMonth) {
+    // Eğer bugün bitiş tarihinden sonra ise
+    if (today > endDate) {
+      return 'Dönem sona erdi'
+    }
+    
+    // Dönem içindeyse
+    return 'Dönem bitimine kalan süre'
+  }
+  
+  // Seçilen ay gelecekteki bir ay ise
+  return 'Dönem başlangıcına kalan süre'
 })
 
 const formatCurrency = (amount) => {
@@ -398,4 +503,4 @@ const remainingLimitClass = computed(() => {
     gap: 1rem;
   }
 }
-</style> 
+</style>

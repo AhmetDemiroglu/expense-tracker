@@ -4,32 +4,32 @@
 
 ---
 
-## 🚀 Özellikler
+## Özellikler
 
-- 📅 **Kredi Kartı Dönem Takibi**
+- **Kredi Kartı Dönem Takibi**
   Hesap kesim tarihlerini ve dönem başlangıçlarını kolayca ayarlayın. Aktif dönem içindeki harcamalarınızı takip edin.
 
-- 💰 **Günlük Harcama Kaydı**
+- **Günlük Harcama Kaydı**
   Günlük harcamalarınızı kaydedin ve kategorilere ayırarak detaylı bir şekilde görüntüleyin.
 
-- 💳 **Borç Takibi**
+- **Borç Takibi**
   Kredi kartı borçlarınızı ve diğer ödemelerinizi kolayca yönetin.
 
-- 📊 **Fatura Yönetimi**
+- **Fatura Yönetimi**
   Fatura ödemelerinizi takip edin ve düzenli olarak kaydedin.
 
-- 🏦 **Birikim Planlaması**
+- **Birikim Planlaması**
   Finansal hedeflerinize ulaşmak için birikimlerinizi planlayın.
 
-- 📈 **Gelir Takibi**
+- **Gelir Takibi**
   Aylık gelirlerinizi kaydedin ve bütçenizi buna göre planlayın.
 
-- 📱 **Mobil Uyumlu Tasarım**
+- **Mobil Uyumlu Tasarım**
   Tüm cihazlarda (mobil, tablet, masaüstü) sorunsuz çalışan responsive bir tasarım.
 
 ---
 
-## 🛠️ Teknolojiler
+## Teknolojiler
 
 - **Vue.js 3** (Composition API ile)
 - **Vuex** (State Management)
@@ -38,7 +38,7 @@
 
 ---
 
-## 📦 Kurulum
+## Kurulum
 
 ### Bağımlılıkları yükleyin
 
@@ -60,22 +60,26 @@ npm run build
 
 ---
 
-## 🌐 Ortam Değişkenleri
+## Ortam Değişkenleri
 
 Projenin çalışması için bir `.env` dosyası oluşturun ve Firebase yapılandırma bilgilerinizi ekleyin:
 
 ```env
 VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+VITE_FIREBASE_DATABASE_URL=your_database_url
 VITE_FIREBASE_PROJECT_ID=your_project_id
 VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
+VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 ```
+
+Örnek bir `.env.example` dosyası projenin kök dizininde bulunmaktadır. Bu dosyayı `.env` olarak kopyalayıp kendi Firebase yapılandırma bilgilerinizle doldurabilirsiniz.
 
 ---
 
-## 📂 Proje Yapısı
+## Proje Yapısı
 
 ```plaintext
 expense-tracker/
@@ -94,7 +98,7 @@ expense-tracker/
 
 ---
 
-## 📋 Özellikler Detayı
+## Özellikler Detayı
 
 ### Kredi Kartı Dönem Takibi
 
@@ -122,7 +126,7 @@ expense-tracker/
 
 ---
 
-## 📜 Lisans
+## Lisans
 
 Bu proje özel kullanım için geliştirilmiştir ve tüm hakları saklıdır.
 Son güncelleme: 4 Şubat 2025

@@ -5,6 +5,7 @@ import bills from './modules/bills'
 import debts from './modules/debts'
 import savings from './modules/savings'
 import auth from './modules/auth'
+import settings from './modules/settings'
 
 export default createStore({
   state: {
@@ -25,6 +26,7 @@ export default createStore({
     bills,
     debts,
     savings,
-    auth
+    auth,
+    settings
   }
-}) 
+})
