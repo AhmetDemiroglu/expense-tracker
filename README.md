@@ -12,6 +12,9 @@
 - **Günlük Harcama Kaydı**
   Günlük harcamalarınızı kaydedin ve kategorilere ayırarak detaylı bir şekilde görüntüleyin.
 
+- **Dinamik Günlük Limit Hesaplama**
+  Geçmiş harcamalarınıza göre günlük limitiniz otomatik olarak güncellenir. Böylece bütçenizi daha etkili bir şekilde yönetebilirsiniz.
+
 - **Borç Takibi**
   Kredi kartı borçlarınızı ve diğer ödemelerinizi kolayca yönetin.
 
@@ -34,6 +37,7 @@
 - **Vue.js 3** (Composition API ile)
 - **Vuex** (State Management)
 - **Firebase Realtime Database**
+- **Firebase Authentication**
 - **Firebase Hosting**
 
 ---
@@ -86,8 +90,15 @@ expense-tracker/
 ├── src/
 │   ├── assets/         # Statik dosyalar
 │   ├── components/     # Vue bileşenleri
+│   │   ├── bills/      # Fatura yönetimi bileşenleri
+│   │   ├── calendar/   # Takvim ve günlük görünüm bileşenleri
+│   │   ├── debts/      # Borç takibi bileşenleri
+│   │   ├── expenses/   # Harcama yönetimi bileşenleri
+│   │   ├── income/     # Gelir yönetimi bileşenleri
+│   │   ├── savings/    # Birikim yönetimi bileşenleri
+│   │   └── shared/     # Paylaşılan bileşenler
 │   ├── router/         # Vue Router yapılandırması
-│   ├── services/       # API servisleri
+│   ├── services/       # API servisleri ve Firebase bağlantıları
 │   ├── store/          # Vuex store modülleri
 │   ├── views/          # Sayfa bileşenleri
 │   ├── App.vue         # Ana uygulama bileşeni
@@ -105,28 +116,41 @@ expense-tracker/
 - Hesap kesim tarihi belirleme
 - Dönem başlangıç tarihi ayarlama
 - Aktif dönem içi harcama takibi
+- Dönem bazlı raporlama
 
 ### Harcama Yönetimi
 
 - Günlük harcama kaydı
 - Harcama kategorileri
 - Harcama detayları görüntüleme
+- Harcama istatistikleri
 
-### Bütçe Planlama
+### Dinamik Bütçe Planlama
 
 - Aylık gelir takibi
 - Sabit gider yönetimi
-- Günlük harcama limiti hesaplama
+- Dinamik günlük harcama limiti hesaplama
+  - Geçmiş harcamalara göre otomatik limit ayarlama
+  - Limit değişim göstergesi
+  - Kalan günler için bütçe optimizasyonu
 
 ### Borç ve Fatura Takibi
 
 - Kredi kartı borçları
 - Fatura ödemeleri
 - Birikim hedefleri
+- Ödeme hatırlatıcıları
+
+### Veri Görselleştirme
+
+- Takvim görünümü
+- Günlük, haftalık ve aylık raporlar
+- Harcama dağılım grafikleri
+- PDF ve yazdırma desteği
 
 ---
 
 ## Lisans
 
 Bu proje özel kullanım için geliştirilmiştir ve tüm hakları saklıdır.
-Son güncelleme: 4 Şubat 2025
+Son güncelleme: 1 Mart 2025

@@ -81,29 +81,15 @@ export default {
     isPeriodStart: {
       type: Boolean,
       default: false
+    },
+    dailyLimit: {
+      type: Number,
+      default: 0
     }
   },
   setup(props) {
     const store = useStore()
     
-    const dailyLimit = computed(() => {
-      const monthData = props.monthData
-      if (!monthData?.cutoffDate || !monthData?.periodStartDate) return 0
-
-      const startDate = new Date(monthData.periodStartDate)
-      const endDate = new Date(monthData.cutoffDate)
-      
-      const diffTime = Math.abs(endDate - startDate)
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-      
-      const remainingBudget = store.getters['income/totalIncome'] - 
-                            (store.getters['bills/totalBills'] + 
-                             store.getters['debts/totalDebts'] +
-                             store.state.savings.monthlySavings)
-      
-      return remainingBudget / diffDays
-    })
-
     const dayExpenses = computed(() => {
       const expenses = store.state.expenses?.expenses || []
       if (!expenses.length) return []
@@ -123,7 +109,7 @@ export default {
     })
 
     const remainingLimit = computed(() => {
-      return dailyLimit.value - dayTotal.value
+      return props.dailyLimit - dayTotal.value
     })
 
     const hasExpenses = computed(() => dayExpenses.value.length > 0)
@@ -136,7 +122,7 @@ export default {
     })
 
     const isDayUnderBudget = computed(() => {
-      return dayTotal.value <= dailyLimit.value
+      return dayTotal.value <= props.dailyLimit
     })
 
     const isOverBudget = computed(() => {
@@ -158,6 +144,77 @@ export default {
       }).format(amount)
     }
 
+    const dailyLimit = computed(() => {
+      if (!props.isInPeriod) return 0
+      
+      const monthData = props.monthData
+      if (!monthData?.cutoffDate || !monthData?.periodStartDate) return 0
+
+      const startDate = new Date(monthData.periodStartDate)
+      const endDate = new Date(monthData.cutoffDate)
+      
+      // Toplam dönem gün sayısı
+      const diffTime = Math.abs(endDate - startDate)
+      const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      
+      // Toplam bütçe
+      const totalBudget = store.getters['income/totalIncome'] - 
+                         (store.getters['bills/totalBills'] + 
+                          store.getters['debts/totalDebts'] +
+                          store.state.savings.monthlySavings)
+      
+      // Statik günlük limit (eski hesaplama)
+      const staticDailyLimit = totalBudget / totalDays
+      
+      // Bugünün tarihini al
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      // Dönem bitiş tarihini al
+      const periodEndDate = new Date(monthData.cutoffDate)
+      periodEndDate.setHours(0, 0, 0, 0)
+      
+      // Eğer bugün dönem başlangıcından önceyse, statik limiti döndür
+      if (today < startDate) {
+        return staticDailyLimit
+      }
+      
+      // Eğer bugün dönem bitişinden sonraysa, 0 döndür
+      if (today > periodEndDate) {
+        return 0
+      }
+      
+      // Geçmiş günlerin harcamalarını hesapla
+      const pastDaysExpenses = getPastDaysExpenses(startDate, today)
+      
+      // Geçmiş günlerin sayısını hesapla (bugün hariç)
+      const pastDaysCount = Math.floor((today - startDate) / (1000 * 60 * 60 * 24))
+      
+      // Kalan gün sayısı
+      const remainingDays = totalDays - pastDaysCount
+      
+      // Eğer kalan gün yoksa veya 0'dan az ise, 0 döndür
+      if (remainingDays <= 0) return 0
+      
+      // Güncellenmiş günlük limit: Kalan bütçe / Kalan gün sayısı
+      const updatedDailyLimit = (totalBudget - pastDaysExpenses) / remainingDays
+      
+      return updatedDailyLimit
+    })
+    
+    // Geçmiş günlerin harcamalarını hesapla
+    const getPastDaysExpenses = (startDate, today) => {
+      const expenses = store.state.expenses?.expenses || []
+      if (!expenses.length) return 0
+      
+      return expenses.filter(expense => {
+        const expenseDate = new Date(expense.date)
+        expenseDate.setHours(0, 0, 0, 0)
+        
+        return expenseDate >= startDate && expenseDate < today
+      }).reduce((total, expense) => total + Number(expense.amount), 0)
+    }
+
     return {
       dayTotal,
       remainingLimit,
@@ -168,7 +225,8 @@ export default {
       dayExpenses,
       isOverBudget,
       showNoExpenseInfo,
-      showBudgetSafe
+      showBudgetSafe,
+      dailyLimit
     }
   }
 }
