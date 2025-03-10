@@ -1,4 +1,3 @@
-import { db } from './firebase'
 import { 
   ref,
   set,
@@ -19,14 +18,20 @@ import {
   signOut,
   deleteUser
 } from 'firebase/auth'
+import { db } from '@/services/firebase'
 
 export const expenseAPI = {
-  // Kullanıcı ID'sini al
+  // Mevcut kullanıcının ID'sini al
   getCurrentUserId() {
-    const auth = getAuth()
-    const user = auth.currentUser
-    if (!user) return null // Hata fırlatmak yerine null dön
-    return user.uid
+    try {
+      const auth = getAuth()
+      if (!auth.currentUser) {
+        return null
+      }
+      return auth.currentUser.uid
+    } catch (error) {
+      return null
+    }
   },
 
   // Ay bilgilerini getir
@@ -104,7 +109,6 @@ export const expenseAPI = {
 
       return formattedExpense
     } catch (error) {
-      console.error('Harcama eklenemedi:', error)
       throw error
     }
   },
@@ -168,7 +172,6 @@ export const expenseAPI = {
       const snapshot = await get(incomeRef)
       return snapshot.val()
     } catch (error) {
-      console.error('Gelir bilgileri getirilemedi:', error)
       throw error
     }
   },
@@ -180,7 +183,6 @@ export const expenseAPI = {
       await update(incomeRef, { [type]: Number(amount) })
       return true
     } catch (error) {
-      console.error('Gelir güncellenemedi:', error)
       throw error
     }
   },
@@ -252,30 +254,27 @@ export const expenseAPI = {
   },
 
   // Kesim tarihi işlemleri
-  async saveCutoffDate(date) {
+  async saveCutoffDate(day) {
     try {
       const userId = this.getCurrentUserId()
+      
+      if (!userId) {
+        return false
+      }
+      
+      // Gün değerini sayıya dönüştür
+      const dayValue = parseInt(day)
+      if (isNaN(dayValue) || dayValue < 1 || dayValue > 31) {
+        return false
+      }
+      
+      // Doğrudan sayı değerini kaydet
       const settingsRef = ref(db, `users/${userId}/settings/cutoffDate`)
-      await set(settingsRef, {
-        date: date,
-        updatedAt: new Date().getTime()
-      })
+      await set(settingsRef, dayValue)
+      
       return true
     } catch (error) {
-      console.error('Kesim tarihi kaydedilemedi:', error)
-      throw error
-    }
-  },
-
-  async getCutoffDate() {
-    try {
-      const userId = this.getCurrentUserId()
-      const settingsRef = ref(db, `users/${userId}/settings/cutoffDate`)
-      const snapshot = await get(settingsRef)
-      return snapshot.exists() ? snapshot.val().date : 1 // Default 1
-    } catch (error) {
-      console.error('Kesim tarihi getirilemedi:', error)
-      throw error
+      return false
     }
   },
 
@@ -283,14 +282,45 @@ export const expenseAPI = {
     try {
       const userId = this.getCurrentUserId()
       const settingsRef = ref(db, `users/${userId}/settings/cutoffDate`)
-      await update(settingsRef, {
-        date: newDate,
-        updatedAt: new Date().getTime()
-      })
+      
+      // Doğrudan sayı değerini güncelle
+      await set(settingsRef, newDate)
+      
       return true
     } catch (error) {
-      console.error('Kesim tarihi güncellenemedi:', error)
       throw error
+    }
+  },
+
+  async getCutoffDate() {
+    try {
+      const userId = this.getCurrentUserId()
+      
+      if (!userId) {
+        return 25 // Varsayılan kesim tarihi
+      }
+      
+      // Kullanıcının kesim tarihini al
+      const settingsRef = ref(db, `users/${userId}/settings/cutoffDate`)
+      
+      const snapshot = await get(settingsRef)
+      
+      if (snapshot.exists()) {
+        const data = snapshot.val()
+        
+        // Veri tipine göre işlem yap
+        if (typeof data === 'number') {
+          return data
+        } else if (typeof data === 'string') {
+          return parseInt(data)
+        } else {
+          return 25 // Varsayılan kesim tarihi
+        }
+      } else {
+        return 25 // Varsayılan kesim tarihi
+      }
+    } catch (error) {
+      return 25 // Hata durumunda varsayılan değer
     }
   },
 
@@ -304,7 +334,6 @@ export const expenseAPI = {
       })
       return true
     } catch (error) {
-      console.error('Ay ayarları kaydedilemedi:', error)
       throw error
     }
   },
@@ -320,7 +349,6 @@ export const expenseAPI = {
         lastUpdated: null
       }
     } catch (error) {
-      console.error('Ay ayarları getirilemedi:', error)
       throw error
     }
   },
@@ -349,7 +377,6 @@ export const expenseAPI = {
       }
       return []
     } catch (error) {
-      console.error('Harcamalar getirilemedi:', error)
       throw error
     }
   },
@@ -390,7 +417,6 @@ export const expenseAPI = {
 
       return userCredential.user
     } catch (error) {
-      console.error('Kayıt hatası:', error)
       throw error
     }
   },
@@ -420,7 +446,6 @@ export const expenseAPI = {
 
       return userCredential.user
     } catch (error) {
-      console.error('Giriş hatası:', error)
       throw error
     }
   },
@@ -430,7 +455,6 @@ export const expenseAPI = {
       const auth = getAuth()
       await signOut(auth)
     } catch (error) {
-      console.error('Çıkış hatası:', error)
       throw error
     }
   },
@@ -471,7 +495,6 @@ export const expenseAPI = {
 
       return true
     } catch (error) {
-      console.error('Hesap silinemedi:', error)
       throw error
     }
   }

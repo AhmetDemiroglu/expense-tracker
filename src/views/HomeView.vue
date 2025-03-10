@@ -35,7 +35,7 @@
 
         <div class="card remaining-days">
           <h3>Dönem Bitimine Kalan</h3>
-          <div class="days">{{ remainingDays }} gün</div>
+          <div class="days">{{ daysUntilCutoff }} gün</div>
           <div class="period-info">
             {{ remainingDayInfo }}
           </div>
@@ -56,76 +56,207 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount, onActivated } from 'vue'
 import { useStore } from 'vuex'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { expenseAPI } from '@/services/api'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
+import { db } from '@/services/firebase'
+import { ref as dbRef, get, set } from 'firebase/database'
 
 const store = useStore()
 const router = useRouter()
+const route = useRoute()
 const selectedMonth = ref(new Date().getMonth())
 const selectedYear = ref(new Date().getFullYear())
+const forceUpdate = ref(0) // Hesaplamaları zorla güncellemek için kullanılacak
+const authInitialized = ref(false)
 
 // Auth state'ini izle
 const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
 
-// Kesim tarihini yükle
+// Kesim tarihini yükle ve sayfa verilerini başlat
 onMounted(async () => {
-  if (isAuthenticated.value) {
-    try {
-      await store.dispatch('settings/fetchCutoffDate')
-    } catch (error) {
-      console.error('Kesim tarihi yüklenemedi:', error)
+  try {
+    // Auth durumunun başlatılmasını bekle
+    await waitForAuthInitialized()
+    
+    if (isAuthenticated.value) {
+      await loadSelectedMonthData()
+      await loadData()
+      
+      // Veri yükleme tamamlandıktan sonra forceUpdate'i artır
+      nextTick(() => {
+        forceUpdate.value++
+      })
     }
+  } catch (error) {
+    // Hata durumunda sessizce devam et
   }
 })
 
-// Veri yükleme fonksiyonu
-const loadData = async () => {
-  if (!isAuthenticated.value) return
+// Ay ve yıl değişikliklerini izle
+watch([selectedMonth, selectedYear], async (newValues, oldValues) => {
+  // Eğer kullanıcı oturum açmışsa verileri yeniden yükle
+  if (isAuthenticated.value) {
+    // Önce seçili ayın verilerini Firebase'den al
+    await loadSelectedMonthData()
+    
+    // Sonra diğer verileri yükle
+    await loadData()
+    
+    // Veri yükleme tamamlandıktan sonra forceUpdate'i artır
+    nextTick(() => {
+      forceUpdate.value++
+    })
+  }
+}, { immediate: false })
 
+// Component temizleme
+onBeforeUnmount(() => {
+  // Auth listener'ı temizle
+  // if (unsubscribeAuth.value) {
+  //   unsubscribeAuth.value()
+  //   unsubscribeAuth.value = null
+  // }
+})
+
+// Auth durumunun başlatılmasını bekle
+const waitForAuthInitialized = async () => {
+  if (!store.getters['auth/isAuthInitialized']) {
+    // Auth durumu başlatılana kadar bekle
+    await new Promise(resolve => {
+      const unwatch = store.watch(
+        () => store.getters['auth/isAuthInitialized'],
+        (newValue) => {
+          if (newValue) {
+            unwatch()
+            resolve()
+          }
+        }
+      )
+    })
+  }
+  
+  return true
+}
+
+// Seçili ayın verilerini yükle
+const loadSelectedMonthData = async () => {
   try {
+    // Özel ay bilgilerini başlangıçta null'a ayarla
+    currentMonthCutoffDate.value = null
+    
+    if (!isAuthenticated.value) {
+      return
+    }
+    
+    // Kesim tarihini Firebase'den al
+    await store.dispatch('settings/fetchCutoffDate')
+    
+    // Kullanıcı ID'sini al
+    const userId = await expenseAPI.getCurrentUserId()
+    if (!userId) {
+      return
+    }
+    
+    // Ay verilerini doğrudan Firebase'den al
+    const monthRef = dbRef(db, `users/${userId}/months/${selectedYear.value}/${selectedMonth.value}`)
+    const snapshot = await get(monthRef)
+    
+    if (snapshot.exists()) {
+      const monthData = snapshot.val()
+      
+      // Eğer bu ayın kesim tarihi varsa, onu kullan
+      if (monthData.cutoffDate) {
+        currentMonthCutoffDate.value = new Date(monthData.cutoffDate)
+      }
+    } else {
+      // Bu ay için kayıtlı veri bulunamadı
+    }
+    
+    // Diğer verileri yükle
     await Promise.all([
+      store.dispatch('expenses/fetchExpenses', {
+        year: selectedYear.value,
+        month: selectedMonth.value
+      }),
       store.dispatch('income/fetchIncome', {
         year: selectedYear.value,
-        month: selectedMonth.value 
-      }),
-      store.dispatch('debts/fetchDebts', {
-        year: selectedYear.value,
-        month: selectedMonth.value 
+        month: selectedMonth.value
       }),
       store.dispatch('bills/fetchBills', {
         year: selectedYear.value,
-        month: selectedMonth.value 
+        month: selectedMonth.value
+      }),
+      store.dispatch('debts/fetchDebts', {
+        year: selectedYear.value,
+        month: selectedMonth.value
       }),
       store.dispatch('savings/fetchSavings', {
         year: selectedYear.value,
-        month: selectedMonth.value 
+        month: selectedMonth.value
       })
     ])
   } catch (error) {
-    console.error('Veriler yüklenirken hata oluştu:', error)
+    // Hata durumunda sessizce devam et
   }
 }
 
-// Auth state değiştiğinde verileri yükle
-watch(isAuthenticated, (newValue) => {
-  if (newValue) {
-    loadData()
+// Veri yükleme fonksiyonu
+const loadData = async () => {
+  try {
+    await Promise.all([
+      store.dispatch('expenses/fetchExpenses', { 
+        year: selectedYear.value.toString(), 
+        month: selectedMonth.value.toString() 
+      }),
+      store.dispatch('income/fetchIncome', { 
+        year: selectedYear.value.toString(), 
+        month: selectedMonth.value.toString() 
+      }),
+      store.dispatch('bills/fetchBills', { 
+        year: selectedYear.value.toString(), 
+        month: selectedMonth.value.toString() 
+      }),
+      store.dispatch('savings/fetchSavings', { 
+        year: selectedYear.value.toString(), 
+        month: selectedMonth.value.toString() 
+      })
+    ])
+  } catch (error) {
+    // Hata durumunda sessizce devam et
   }
-})
+}
 
-// Ay veya yıl değiştiğinde verileri yükle
-watch([selectedMonth, selectedYear], () => {
-  if (isAuthenticated.value) {
-    loadData()
+// Sayfa aktif olduğunda (başka sayfadan geri dönüldüğünde) verileri güncelle
+const updatePageData = async () => {
+  try {
+    // Auth durumunun başlatılmasını bekle
+    await waitForAuthInitialized()
+    
+    if (isAuthenticated.value) {
+      // Önce seçili ayın verilerini Firebase'den al
+      await loadSelectedMonthData()
+      
+      // Sonra diğer verileri yükle
+      await loadData()
+      
+      // Veri yükleme tamamlandıktan sonra forceUpdate'i artır
+      nextTick(() => {
+        forceUpdate.value++
+      })
+    }
+  } catch (error) {
+    // Hata durumunda sessizce devam et
   }
-})
+}
 
-onMounted(() => {
-  if (isAuthenticated.value) {
-    loadData()
-  }
+// Sayfa aktif olduğunda (keep-alive kullanılıyorsa)
+onActivated(() => {
+  nextTick(() => {
+    updatePageData()
+  })
 })
 
 const selectedPeriod = computed(() => {
@@ -161,122 +292,110 @@ const formatPeriodDates = computed(() => {
   const periodDates = store.getters['settings/getMonthRange'](selectedYear.value, selectedMonth.value)
   if (!periodDates || !periodDates.start || !periodDates.end) return ''
   
-  // Tarihleri doğru sırayla göster (küçükten büyüğe)
   const startDate = new Date(periodDates.start)
   const endDate = new Date(periodDates.end)
   
   const startDay = startDate.getDate()
-  const endDay = endDate.getDate()
+  const endDay = currentMonthCutoffDate.value ? currentMonthCutoffDate.value.getDate() : endDate.getDate()
   const startMonth = startDate.getMonth()
   const endMonth = endDate.getMonth()
   
-  // Eğer başlangıç ve bitiş ayları farklıysa, ay isimlerini de ekle
   if (startMonth !== endMonth) {
     return `${startDay} ${months[startMonth]} - ${endDay} ${months[endMonth]} arası`
   }
   
-  // Aynı ay içindeyse sadece günleri göster
   return `${startDay} - ${endDay} ${months[endMonth]} arası`
 })
 
-const remainingDays = computed(() => {
-  // Bugünün başlangıcını al (saat 00:00:00)
+// Kesim tarihini yükle
+const currentMonthCutoffDate = ref(null)
+const cutoffDate = computed(() => {
+  if (currentMonthCutoffDate.value) {
+    return currentMonthCutoffDate.value.getDate()
+  }
+  
+  return store.getters['settings/cutoffDate']
+})
+
+// Dönem bitimine kalan gün sayısı
+const daysUntilCutoff = computed(() => {
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  
-  // Seçili ay ve yıl
-  const selectedMonthValue = selectedMonth.value
-  const selectedYearValue = selectedYear.value
-  
-  // Seçilen ayın dönem tarihlerini al
-  const periodDates = store.getters['settings/getMonthRange'](selectedYearValue, selectedMonthValue)
-  if (!periodDates || !periodDates.start || !periodDates.end) return 0
-  
-  const startDate = new Date(periodDates.start)
-  const endDate = new Date(periodDates.end)
-  
-  // Başlangıç tarihini günün başına ayarla
-  startDate.setHours(0, 0, 0, 0)
-  
-  // Bugünün yıl ve ay bilgilerini al
-  const currentYear = today.getFullYear()
+  const currentDay = today.getDate()
   const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
   
-  // Seçilen ay bugünden önceki bir ay ise
-  if (selectedYearValue < currentYear || 
-      (selectedYearValue === currentYear && selectedMonthValue < currentMonth)) {
-    return 0 // Dönem sona ermiş
+  const cutoffDay = cutoffDate.value
+  
+  const selectedMonthNum = Number(selectedMonth.value)
+  const selectedYearNum = Number(selectedYear.value)
+  
+  if (selectedYearNum < currentYear || 
+      (selectedYearNum === currentYear && selectedMonthNum < currentMonth)) {
+    return 0 
   }
   
-  // Seçilen ay bugünün ayı ise
-  if (selectedYearValue === currentYear && selectedMonthValue === currentMonth) {
-    // Eğer bugün bitiş tarihinden sonra ise dönem bitmiş demektir
-    if (today > endDate) {
-      return 0
+  if (selectedYearNum > currentYear || 
+      (selectedYearNum === currentYear && selectedMonthNum > currentMonth)) {
+    const monthDiff = (selectedYearNum - currentYear) * 12 + (selectedMonthNum - currentMonth)
+    
+    if (monthDiff === 1) {
+      const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+      return (lastDayOfMonth - currentDay) + cutoffDay + 1
+    } else {
+      const lastDayOfCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+      const daysLeftInCurrentMonth = lastDayOfCurrentMonth - currentDay
+      
+      let totalDays = daysLeftInCurrentMonth
+      
+      for (let i = 1; i < monthDiff; i++) {
+        const tempMonth = (currentMonth + i) % 12
+        const tempYear = currentYear + Math.floor((currentMonth + i) / 12)
+        const daysInMonth = new Date(tempYear, tempMonth + 1, 0).getDate()
+        totalDays += daysInMonth
+      }
+      
+      totalDays += cutoffDay
+      
+      return totalDays + 1 
     }
-    
-    // Bitiş tarihine kalan günleri hesapla
-    const diffTime = Math.abs(endDate - today)
-    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    // Eğer bugün bitiş tarihiyle aynı günse, 1 gün kalmış demektir
-    if (daysLeft === 0) {
-      return 1
-    }
-    
-    return daysLeft
   }
   
-  // Seçilen ay gelecekteki bir ay ise
-  // Bugünden seçilen ayın başlangıcına kadar olan gün sayısını hesapla
-  const diffTime = Math.abs(startDate - today)
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  if (currentDay < cutoffDay) {
+    return (cutoffDay - currentDay) + 1 
+  } 
+  else {
+    const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1
+    const nextMonthYear = currentMonth === 11 ? currentYear + 1 : currentYear
+    
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+    
+    return (lastDayOfMonth - currentDay) + cutoffDay + 1
+  }
 })
 
 const remainingDayInfo = computed(() => {
-  if (!isAuthenticated.value) return ''
+  const months = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  ]
   
-  // Bugünün başlangıcını al (saat 00:00:00)
+  const cutoffDay = cutoffDate.value
+  
+  const selectedMonthName = months[selectedMonth.value]
+  
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  
-  // Bugünün yıl ve ay bilgilerini al
-  const currentYear = today.getFullYear()
   const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
   
-  // Seçili ay ve yıl
-  const selectedMonthValue = selectedMonth.value
-  const selectedYearValue = selectedYear.value
+  const selectedMonthNum = Number(selectedMonth.value)
+  const selectedYearNum = Number(selectedYear.value)
   
-  // Seçilen ayın dönem tarihlerini al
-  const periodDates = store.getters['settings/getMonthRange'](selectedYearValue, selectedMonthValue)
-  if (!periodDates || !periodDates.start || !periodDates.end) return ''
-  
-  const startDate = new Date(periodDates.start)
-  const endDate = new Date(periodDates.end)
-  
-  // Başlangıç tarihini günün başına ayarla
-  startDate.setHours(0, 0, 0, 0)
-  
-  // Seçilen ay bugünden önceki bir ay ise
-  if (selectedYearValue < currentYear || 
-      (selectedYearValue === currentYear && selectedMonthValue < currentMonth)) {
-    return 'Dönem sona erdi'
+  if (selectedYearNum < currentYear || 
+      (selectedYearNum === currentYear && selectedMonthNum < currentMonth)) {
+    return 'Bu dönem tamamlandı'
   }
   
-  // Seçilen ay bugünün ayı ise
-  if (selectedYearValue === currentYear && selectedMonthValue === currentMonth) {
-    // Eğer bugün bitiş tarihinden sonra ise
-    if (today > endDate) {
-      return 'Dönem sona erdi'
-    }
-    
-    // Dönem içindeyse
-    return 'Dönem bitimine kalan süre'
-  }
-  
-  // Seçilen ay gelecekteki bir ay ise
-  return 'Dönem başlangıcına kalan süre'
+  return `${cutoffDay} ${selectedMonthName} hesap kesim tarihi`
 })
 
 const formatCurrency = (amount) => {
@@ -300,16 +419,12 @@ const showDetails = () => {
 }
 
 const totalExpenses = computed(() => {
-  // Faturalar
   const bills = store.getters['bills/totalBills'] || 0
   
-  // Borçlar
   const debts = store.getters['debts/totalDebts'] || 0
   
-  // Birikim
   const savings = store.state.savings.monthlySavings || 0
   
-  // Sadece sabit harcamaların toplamı
   return bills + debts + savings
 })
 

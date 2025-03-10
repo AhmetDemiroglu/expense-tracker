@@ -129,9 +129,9 @@
           
           <div v-if="dailyLimitChangeInfo.change !== 0" class="summary-item limit-change">
             <span class="label">Limit Değişimi:</span>
-            <span class="amount" :class="{ 'positive': dailyLimitChangeInfo.isPositive, 'negative': !dailyLimitChangeInfo.isPositive }">
-              {{ dailyLimitChangeInfo.isPositive ? '+' : '' }}{{ formatCurrency(dailyLimitChangeInfo.change) }}
-              <i :class="dailyLimitChangeInfo.isPositive ? 'fas fa-arrow-up' : 'fas fa-arrow-down'"></i>
+            <span class="amount" :class="{ 'positive': dailyLimitChangeInfo.direction === 'up', 'negative': dailyLimitChangeInfo.direction === 'down' }">
+              {{ dailyLimitChangeInfo.direction === 'up' ? '+' : '' }}{{ formatCurrency(dailyLimitChangeInfo.change) }}
+              <i :class="dailyLimitChangeInfo.direction === 'up' ? 'fas fa-arrow-up' : 'fas fa-arrow-down'"></i>
             </span>
           </div>
         
@@ -153,15 +153,14 @@
           <div
             v-for="day in monthDays"
             :key="day.date"
-            class="grid-cell"
             :class="{
-              'current-month': day.isCurrentMonth,
-              'other-month': !day.isCurrentMonth,
+              'calendar-day': true,
+              'not-current-month': !day.isCurrentMonth,
               'today': isToday(day.date),
               'cutoff-date': isCutoffDate(day.date),
               'period-start': isPeriodStart(day.date),
-              'period-active': isInPeriod(day.date),
-              'period-inactive': !isInPeriod(day.date),
+              'period-active': day.isInPeriod,
+              'period-inactive': !day.isInPeriod,
               'selected': isSelected(day.date)
             }"
             @click="selectDate(day.date)"
@@ -180,7 +179,7 @@
             <DayCell 
               :day="day"
               :month-data="monthData"
-              :is-in-period="isInPeriod(day.date)"
+              :is-in-period="day.isInPeriod"
               :is-cutoff-date="isCutoffDate(day.date)"
               :is-period-start="isPeriodStart(day.date)"
               :daily-limit="dailySpendingLimit"
@@ -197,7 +196,7 @@
         :date="selectedDate"
         :expenses="selectedDayExpenses"
         @close="closeDetailsModal"
-        @add-expense="openAddExpenseModal"
+        @add-expense="openAddExpenseModal(selectedDate)"
         @delete-expense="confirmDelete"
       />
 
@@ -206,7 +205,7 @@
         v-if="showExpenseForm"
         :date="selectedDate"
         @close="closeAddExpenseModal"
-        @save="saveExpense"
+        @save="handleAddExpense"
       />
 
       <!-- Silme Onay Modalı -->
@@ -291,6 +290,26 @@ export default {
     const cutoffDateInput = ref('')
     const periodStartInput = ref('')
 
+    // Auth durumunun başlatılmasını bekle
+    const waitForAuth = async () => {
+      if (!store.getters['auth/isAuthInitialized']) {
+        // Auth durumu başlatılana kadar bekle
+        await new Promise(resolve => {
+          const unwatch = store.watch(
+            () => store.getters['auth/isAuthInitialized'],
+            (newValue) => {
+              if (newValue) {
+                unwatch()
+                resolve()
+              }
+            }
+          )
+        })
+      }
+      
+      return store.getters['auth/isAuthenticated']
+    }
+
     const months = [
       'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
       'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
@@ -308,6 +327,60 @@ export default {
     // Ay içindeki günleri hesapla
     const monthDays = computed(() => {
       const days = []
+      
+      // Eğer dönem başlangıç ve bitiş tarihleri ayarlanmışsa, döneme göre günleri göster
+      if (monthData.value.periodStartDate && monthData.value.cutoffDate) {
+        // Dönem başlangıç ve bitiş tarihlerini Date nesnelerine dönüştür
+        const periodStart = new Date(monthData.value.periodStartDate)
+        const cutoffDate = new Date(monthData.value.cutoffDate)
+        
+        // Dönem başlangıç tarihinin haftanın hangi günü olduğunu bul (Pazartesi = 1, Pazar = 7)
+        let firstDayOfWeek = periodStart.getDay() || 7
+        
+        // Önceki haftanın günlerini ekle (takvimin ilk satırını doldurmak için)
+        if (firstDayOfWeek > 1) {
+          const tempDate = new Date(periodStart)
+          for (let i = firstDayOfWeek - 1; i > 0; i--) {
+            tempDate.setDate(tempDate.getDate() - 1)
+            days.push({
+              date: new Date(tempDate),
+              isCurrentMonth: tempDate.getMonth() === Number(props.month),
+              isInPeriod: false // Dönem dışı
+            })
+          }
+          // Günleri doğru sırayla göstermek için tersine çevir
+          days.reverse()
+        }
+        
+        // Dönem günlerini ekle (başlangıçtan bitişe kadar)
+        const currentDate = new Date(periodStart)
+        while (currentDate <= cutoffDate) {
+          days.push({
+            date: new Date(currentDate),
+            isCurrentMonth: currentDate.getMonth() === Number(props.month),
+            isInPeriod: true // Dönem içi
+          })
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+        
+        // Sonraki haftanın günlerini ekle (takvimin son satırını doldurmak için)
+        const lastDayOfWeek = cutoffDate.getDay() || 7
+        if (lastDayOfWeek < 7) {
+          const tempDate = new Date(cutoffDate)
+          for (let i = 1; i <= 7 - lastDayOfWeek; i++) {
+            tempDate.setDate(tempDate.getDate() + 1)
+            days.push({
+              date: new Date(tempDate),
+              isCurrentMonth: tempDate.getMonth() === Number(props.month),
+              isInPeriod: false // Dönem dışı
+            })
+          }
+        }
+        
+        return days
+      }
+      
+      // Dönem tarihleri ayarlanmamışsa, normal ay görünümünü göster
       const date = new Date(Number(props.year), Number(props.month), 1)
       const lastDay = new Date(Number(props.year), Number(props.month) + 1, 0)
       
@@ -320,7 +393,8 @@ export default {
         for (let i = firstDayOfWeek - 1; i > 0; i--) {
           days.push({
             date: new Date(Number(props.year), Number(props.month) - 1, prevMonthLastDay.getDate() - i + 1),
-            isCurrentMonth: false
+            isCurrentMonth: false,
+            isInPeriod: false
           })
         }
       }
@@ -329,7 +403,8 @@ export default {
       for (let i = 1; i <= lastDay.getDate(); i++) {
         days.push({
           date: new Date(Number(props.year), Number(props.month), i),
-          isCurrentMonth: true
+          isCurrentMonth: true,
+          isInPeriod: false // İlk başta false, sonra kontrol edilecek
         })
       }
 
@@ -339,9 +414,43 @@ export default {
         for (let i = 1; i <= 7 - lastDayOfWeek; i++) {
           days.push({
             date: new Date(Number(props.year), Number(props.month) + 1, i),
-            isCurrentMonth: false
+            isCurrentMonth: false,
+            isInPeriod: false
           })
         }
+      }
+      
+      // Dönem tarihleri varsa, dönem içindeki günleri işaretle
+      if (monthData.value.periodStartDate && monthData.value.cutoffDate) {
+        const periodStart = new Date(monthData.value.periodStartDate)
+        const cutoffDate = new Date(monthData.value.cutoffDate)
+        
+        // Her gün için dönem içinde olup olmadığını kontrol et
+        days.forEach(day => {
+          const dayTime = day.date.setHours(0, 0, 0, 0)
+          const startTime = new Date(periodStart).setHours(0, 0, 0, 0)
+          const endTime = new Date(cutoffDate).setHours(0, 0, 0, 0)
+          
+          // Dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
+          if (startTime > endTime) {
+            // Önceki ayın dönem başlangıcını hesapla
+            const prevMonthStart = new Date(startTime)
+            prevMonthStart.setMonth(prevMonthStart.getMonth() - 1)
+            const prevStartTime = prevMonthStart.getTime()
+            
+            // Sonraki ayın kesim tarihini hesapla
+            const nextMonthEnd = new Date(endTime)
+            nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1)
+            const nextEndTime = nextMonthEnd.getTime()
+            
+            // Tarih ya önceki dönemde ya da sonraki dönemde olmalı
+            day.isInPeriod = (dayTime >= prevStartTime && dayTime <= endTime) || 
+                             (dayTime >= startTime && dayTime <= nextEndTime)
+          } else {
+            // Normal durum - başlangıç ve bitiş aynı ayda
+            day.isInPeriod = dayTime >= startTime && dayTime <= endTime
+          }
+        })
       }
 
       return days
@@ -366,27 +475,44 @@ export default {
     }
 
     const openAddExpenseModal = (date) => {
-      selectedDate.value = date
+      if (date) {
+        selectedDate.value = date
+      }
       showExpenseForm.value = true
     }
 
     const closeAddExpenseModal = () => {
       showExpenseForm.value = false
+      // selectedDate.value'yu null yapmıyoruz ki detay modalına döndüğünde tarih bilgisi korunsun
     }
 
-    const saveExpense = async (expense) => {
+    // Harcama ekleme işlemi
+    const handleAddExpense = async (expenseData) => {
       try {
+        // Harcama tarihini ayarla
+        const expenseDate = selectedDate.value
+        
+        // Harcama verilerini hazırla
+        const expense = {
+          ...expenseData,
+          date: expenseDate.toISOString(),
+          createdAt: new Date().toISOString()
+        }
+        
+        // Store'a ekle
         await store.dispatch('expenses/addExpense', {
-          year: props.year,
-          month: props.month,
-          expense: {
-            ...expense,
-            date: selectedDate.value
-          }
+          year: expenseDate.getFullYear().toString(),
+          month: expenseDate.getMonth().toString(),
+          expense
         })
+        
+        // Formu kapat
         closeAddExpenseModal()
+        
+        // Detay modalını aç - Burada tarih bilgisini açıkça gönderiyoruz
+        openDetailsModal(expenseDate)
       } catch (error) {
-        console.error('Harcama eklenemedi:', error)
+        console.error('Harcama eklenirken hata:', error)
       }
     }
 
@@ -407,7 +533,7 @@ export default {
           monthData.value = {
             periodStartDate: null,
             cutoffDate: null,
-            lastUpdated: Date.now()
+            lastUpdated: null
           }
         }
 
@@ -444,12 +570,29 @@ export default {
     const updateCutoffDate = async () => {
       if (!cutoffDateInput.value) return
 
-      const timestamp = new Date(cutoffDateInput.value).getTime()
-      await saveMonthData({
-        ...monthData.value,
-        cutoffDate: timestamp
-      })
-      isEditingCutoff.value = false
+      try {
+        // Tarih değerini alıp gün olarak çıkar
+        const date = new Date(cutoffDateInput.value)
+        const day = date.getDate()
+        
+        console.log('CalendarGrid: Kesim tarihi güncelleniyor:', day)
+        
+        // Store üzerinden kesim tarihini güncelle (global ayar)
+        await store.dispatch('settings/saveCutoffDate', day)
+        
+        // Ay verilerini de güncelle
+        await saveMonthData({
+          ...monthData.value,
+          cutoffDate: date.getTime()
+        })
+        
+        isEditingCutoff.value = false
+        
+        // Sayfayı yenile
+        window.location.reload()
+      } catch (error) {
+        console.error('Kesim tarihi güncellenirken hata oluştu:', error)
+      }
     }
 
     // Dönem başlangıç tarihi güncelleme
@@ -498,7 +641,7 @@ export default {
 
     // Tüm verileri yükle
     const loadAllData = async () => {
-      if (!store.getters['auth/isAuthenticated']) {
+      if (!await waitForAuth()) {
         isLoading.value = false
         return
       }
@@ -537,7 +680,7 @@ export default {
     }
 
     // Bileşen yüklendiğinde ve auth state değiştiğinde verileri getir
-    onMounted(() => {
+    onMounted(async () => {
       const auth = getAuth()
       onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -553,7 +696,7 @@ export default {
         () => store.state.selectedMonth
       ],
       async () => {
-        if (store.getters['auth/isAuthenticated']) {
+        if (await waitForAuth()) {
           await loadAllData()
         }
       }
@@ -579,45 +722,16 @@ export default {
       return totalIncome.value - totalEstimatedExpenses.value
     })
 
-    // Geçmiş günlerin harcamalarını hesaplayan fonksiyon
-    const getPastDaysExpenses = () => {
-      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) return 0
-      
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      
-      const startDate = new Date(monthData.value.periodStartDate)
-      startDate.setHours(0, 0, 0, 0)
-      
-      // Bugün dönem başlangıcından önceyse, henüz geçmiş gün yok
-      if (today < startDate) return { pastDaysCount: 0, pastDaysExpenses: 0 }
-      
-      // Geçmiş günlerin sayısını hesapla (bugün dahil)
-      const diffTime = Math.abs(today - startDate)
-      const pastDaysCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-      
-      // Geçmiş günlerin harcamalarını topla
-      const pastDaysExpenses = store.state.expenses.expenses
-        .filter(expense => {
-          const expenseDate = new Date(expense.date)
-          expenseDate.setHours(0, 0, 0, 0)
-          
-          // Bugün ve önceki günlerin harcamalarını dahil et
-          return expenseDate <= today && expenseDate >= startDate
-        })
-        .reduce((total, expense) => total + Number(expense.amount), 0)
-      
-      return { pastDaysCount, pastDaysExpenses }
-    }
-
-    // Günlük limit hesaplaması (dinamik)
+    // Günlük harcama limiti
     const dailySpendingLimit = computed(() => {
-      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) return 0
+      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) {
+        return 0
+      }
       
       const startDate = new Date(monthData.value.periodStartDate)
       const endDate = new Date(monthData.value.cutoffDate)
       
-      // Toplam dönem gün sayısı
+      // Toplam gün sayısı
       const diffTime = Math.abs(endDate - startDate)
       const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
       
@@ -626,59 +740,73 @@ export default {
         (store.getters['bills/totalBills'] + 
          store.getters['debts/totalDebts'] +
          store.state.savings.monthlySavings)
-      
-      // Statik günlük limit (eski hesaplama)
-      const staticDailyLimit = totalBudget / totalDays
       
       // Bugünün tarihini al
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       
-      // Dönem bitiş tarihini al
-      const periodEndDate = new Date(monthData.value.cutoffDate)
-      periodEndDate.setHours(0, 0, 0, 0)
+      // Bugün dönem içinde mi kontrol et
+      const todayTime = today.getTime()
+      const startTime = startDate.setHours(0, 0, 0, 0)
+      const endTime = endDate.setHours(0, 0, 0, 0)
       
-      // Eğer bugün dönem başlangıcından önceyse, statik limiti döndür
-      if (today < startDate) {
-        return staticDailyLimit
+      let isInCurrentPeriod = false
+      
+      // Dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
+      if (startTime > endTime) {
+        // Önceki ayın dönem başlangıcını hesapla
+        const prevMonthStart = new Date(startTime)
+        prevMonthStart.setMonth(prevMonthStart.getMonth() - 1)
+        const prevStartTime = prevMonthStart.getTime()
+        
+        // Sonraki ayın kesim tarihini hesapla
+        const nextMonthEnd = new Date(endTime)
+        nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1)
+        const nextEndTime = nextMonthEnd.getTime()
+        
+        // Bugün ya önceki dönemde ya da sonraki dönemde olmalı
+        isInCurrentPeriod = (todayTime >= prevStartTime && todayTime <= endTime) || 
+                           (todayTime >= startTime && todayTime <= nextEndTime)
+      } else {
+        // Normal durum - başlangıç ve bitiş aynı ayda
+        isInCurrentPeriod = todayTime >= startTime && todayTime <= endTime
       }
       
-      // Eğer bugün dönem bitişinden sonraysa, 0 döndür
-      if (today > periodEndDate) {
-        return 0
+      // Eğer bugün dönem içinde değilse, statik limit döndür
+      if (!isInCurrentPeriod) {
+        return totalBudget / totalDays
       }
       
-      // Geçmiş günlerin harcamalarını ve sayısını al
-      const { pastDaysCount, pastDaysExpenses } = getPastDaysExpenses()
+      // Bugüne kadar olan harcamaları topla
+      const expensesToDate = store.state.expenses.expenses
+        .filter(expense => {
+          const expenseDate = new Date(expense.date)
+          expenseDate.setHours(0, 0, 0, 0)
+          
+          // Bugünden önceki ve dönem içindeki harcamaları al
+          return expenseDate < today && expenseDate >= new Date(startTime)
+        })
+        .reduce((total, expense) => total + Number(expense.amount), 0)
       
-      // Kalan gün sayısı
-      const remainingDays = totalDays - pastDaysCount + 1 // Bugünü de dahil et
+      // Bugünden dönem sonuna kadar kalan gün sayısı
+      const daysLeft = Math.ceil((endTime - todayTime) / (1000 * 60 * 60 * 24)) + 1
       
-      // Geçmiş günlerin ideal harcaması
-      const idealPastExpenses = staticDailyLimit * (pastDaysCount - 1) // Bugünü hariç tut
+      // Kalan bütçe
+      const remainingBudget = totalBudget - expensesToDate
       
-      // Geçmiş günlerin harcama farkı (+ ise tasarruf, - ise aşım)
-      const expenseDifference = idealPastExpenses - pastDaysExpenses
-      
-      // Kalan günler için güncellenmiş günlük limit
-      // Eğer kalan gün yoksa veya 0'dan az ise, 0 döndür
-      if (remainingDays <= 0) return 0
-      
-      // Güncellenmiş günlük limit: Kalan bütçe / Kalan gün sayısı
-      const updatedDailyLimit = (totalBudget - pastDaysExpenses) / remainingDays
-      
-      return updatedDailyLimit
+      // Kalan günlük limit
+      return remainingBudget / daysLeft
     })
 
     // Günlük limit değişim bilgisi
     const dailyLimitChangeInfo = computed(() => {
-      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) return { change: 0, isPositive: true }
+      if (!monthData.value.periodStartDate || !monthData.value.cutoffDate) {
+        return { change: 0, direction: 'none' }
+      }
       
-      // Toplam dönem gün sayısı
+      // Toplam gün sayısı
       const startDate = new Date(monthData.value.periodStartDate)
       const endDate = new Date(monthData.value.cutoffDate)
-      const diffTime = Math.abs(endDate - startDate)
-      const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
       
       // Toplam bütçe
       const totalBudget = store.getters['income/totalIncome'] - 
@@ -686,14 +814,17 @@ export default {
          store.getters['debts/totalDebts'] +
          store.state.savings.monthlySavings)
       
-      // Statik günlük limit (eski hesaplama)
-      const staticDailyLimit = totalBudget / totalDays
+      // Statik günlük limit
+      const staticDailyLimit = totalBudget / Math.ceil(Math.abs(endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
       
       // Değişim miktarı ve yönü
       const change = dailySpendingLimit.value - staticDailyLimit
-      const isPositive = change >= 0
+      const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'none'
       
-      return { change, isPositive }
+      return {
+        change: Math.abs(change),
+        direction
+      }
     })
 
     // Dönem içi harcamaları hesapla
@@ -797,6 +928,7 @@ export default {
           }
           .expense-summary {
             font-size: 8pt !important;
+            line-height: 1.2;
           }
           .indicator {
             font-size: 7pt !important;
@@ -920,22 +1052,6 @@ export default {
                 display: none;
               }
 
-              .remaining-limit {
-                font-size: 0.9rem;
-              }
-
-              .remaining-limit.positive {
-                color: #00B2A9;
-              }
-
-              .remaining-limit.negative {
-                color: #dc3545;
-              }
-
-              .day-actions {
-                display: none;
-              }
-
               .budget-warning,
               .no-expense-info,
               .budget-safe {
@@ -991,12 +1107,11 @@ export default {
     const startEditingCutoff = () => {
       isEditingCutoff.value = true
       if (monthData.value.cutoffDate) {
-        const date = new Date(monthData.value.cutoffDate)
-        cutoffDateInput.value = date.toISOString().split('T')[0]
+        cutoffDateInput.value = new Date(monthData.value.cutoffDate).toISOString().split('T')[0]
       }
     }
 
-    const saveCutoffDate = () => {
+    const saveCutoffDate = async () => {
       if (!cutoffDateInput.value) {
         isEditingCutoff.value = false
         return
@@ -1016,12 +1131,11 @@ export default {
     const startEditingPeriod = () => {
       isEditingPeriod.value = true
       if (monthData.value.periodStartDate) {
-        const date = new Date(monthData.value.periodStartDate)
-        periodStartInput.value = date.toISOString().split('T')[0]
+        periodStartInput.value = new Date(monthData.value.periodStartDate).toISOString().split('T')[0]
       }
     }
 
-    const savePeriodDate = () => {
+    const savePeriodDate = async () => {
       if (!periodStartInput.value) {
         isEditingPeriod.value = false
         return
@@ -1089,35 +1203,6 @@ export default {
       return date.toDateString() === today.toDateString()
     }
 
-    // Dönem içi kontrolü
-    const isInPeriod = (date) => {
-      if (!date || !monthData.value.periodStartDate || !monthData.value.cutoffDate) return false
-      
-      const checkTime = new Date(date).setHours(0, 0, 0, 0)
-      const startTime = new Date(monthData.value.periodStartDate).setHours(0, 0, 0, 0)
-      const endTime = new Date(monthData.value.cutoffDate).setHours(0, 0, 0, 0)
-
-      // Dönem başlangıcı kesim tarihinden sonraysa (ay geçişi var)
-      if (startTime > endTime) {
-        // Önceki ayın dönem başlangıcını hesapla
-        const prevMonthStart = new Date(startTime)
-        prevMonthStart.setMonth(prevMonthStart.getMonth() - 1)
-        const prevStartTime = prevMonthStart.getTime()
-
-        // Sonraki ayın kesim tarihini hesapla
-        const nextMonthEnd = new Date(endTime)
-        nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1)
-        const nextEndTime = nextMonthEnd.getTime()
-
-        // Tarih ya önceki dönemde ya da sonraki dönemde olmalı
-        return (checkTime >= prevStartTime && checkTime <= endTime) || 
-               (checkTime >= startTime && checkTime <= nextEndTime)
-      }
-      
-      // Normal durum - başlangıç ve bitiş aynı ayda
-      return checkTime >= startTime && checkTime <= endTime
-    }
-
     // Kesim tarihi kontrolü
     const isCutoffDate = (date) => {
       if (!date || !monthData.value.cutoffDate) return false
@@ -1160,15 +1245,22 @@ export default {
     }
 
     // Tarih formatlama fonksiyonu
-    const formatPeriodDate = (date) => {
-      if (!date) return 'Seçilmedi'
-      const formattedDate = new Date(date)
-      return `${formattedDate.getDate()} ${months[formattedDate.getMonth()]}`
+    const formatPeriodDate = (dateString) => {
+      if (!dateString) return 'Seçilmedi'
+      
+      const date = new Date(dateString)
+      const day = date.getDate().toString().padStart(2, '0')
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const year = date.getFullYear()
+      
+      return `${day}.${month}.${year}`
     }
 
     return {
       weekDays,
       monthDays,
+      monthName,
+      year,
       showExpenseList,
       showExpenseForm,
       selectedDate,
@@ -1177,9 +1269,7 @@ export default {
       closeDetailsModal,
       openAddExpenseModal,
       closeAddExpenseModal,
-      saveExpense,
-      monthName,
-      year,
+      handleAddExpense,
       showIncomeModal,
       showDebtsModal,
       showBillsModal,
@@ -1206,12 +1296,6 @@ export default {
       cutoffDateInput,
       periodStartInput,
       saveDates,
-      isInPeriod,
-      startEditingCutoff,
-      saveCutoffDate,
-      startEditingPeriod,
-      savePeriodDate,
-      formatPeriodDate,
       totalPeriodExpenses,
       showConfirmDelete,
       selectedExpenseId,
@@ -1223,7 +1307,12 @@ export default {
       isLoading,
       selectDate,
       isSelected,
-      dailyLimitChangeInfo
+      dailyLimitChangeInfo,
+      formatPeriodDate,
+      startEditingCutoff,
+      saveCutoffDate,
+      startEditingPeriod,
+      savePeriodDate
     }
   }
 }
@@ -1303,49 +1392,137 @@ export default {
 }
 
 .back-btn:hover {
-  background-color: rgba(0, 155, 159, 0.1);
-  transform: translateX(-4px);
+  background-color: rgba(0, 59, 92, 0.05);
+}
+
+.back-btn i {
+  color: #009B9F;
 }
 
 .calendar-grid {
-  background: white;
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 59, 92, 0.1);
-  margin-top: 2rem;
-  width: 100%;
-  box-sizing: border-box;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 59, 92, 0.1);
+  overflow: hidden;
 }
 
-.grid-body-wrapper {
-  width: 100%;
-  height: auto;
-}
-
-.grid-header, .grid-body {
+.grid-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.5rem;
-  width: 100%;
-}
-
-.grid-cell {
-  min-height: 120px;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  padding: 0.5rem;
-  position: relative;
-  background: white;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  background-color: #f8f9fa;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e9ecef;
 }
 
 .weekday {
   text-align: center;
-  font-weight: 500;
+  font-weight: 600;
   color: #003B5C;
+}
+
+.grid-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.calendar-day {
+  position: relative;
+  min-height: 120px;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.calendar-day:hover {
+  box-shadow: 0 2px 12px rgba(0, 59, 92, 0.1);
+  border-color: #009B9F;
+}
+
+.calendar-day.not-current-month {
+  background-color: #f8f9fa;
+  color: #adb5bd;
+}
+
+.calendar-day.today {
+  position: relative;
+  border: 2px solid rgba(255, 182, 193, 0.9) !important;
+  box-shadow: 0 2px 12px rgba(255, 182, 193, 0.2);
+  padding: 1rem;
+  min-height: 140px;
+}
+
+.calendar-day.today::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgb(255, 237, 250, 0.5);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.calendar-day.today > * {
+  position: relative;
+  z-index: 1;
+  background: rgb(255, 237, 250, 0.5);
+}
+
+.calendar-day.cutoff-date {
+  background-color: rgba(220, 53, 69, 0.1);
+  border: 2px solid rgba(220, 53, 69, 0.3);
+  box-shadow: 0 2px 12px rgba(220, 53, 69, 0.15);
+}
+
+.calendar-day.period-start {
+  background-color: rgba(0, 178, 169, 0.1);
+  border: 2px solid rgba(0, 178, 169, 0.3);
+  box-shadow: 0 2px 12px rgba(0, 178, 169, 0.15);
+}
+
+.calendar-day.period-active {
+  background-color: rgba(0, 178, 169, 0.05);
+  border: 1px solid rgba(0, 178, 169, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 178, 169, 0.1);
+  opacity: 1;
+}
+
+.calendar-day.period-inactive {
+  background-color: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.calendar-day.period-inactive * {
+  pointer-events: none;
+}
+
+.calendar-day.period-inactive .day-number,
+.calendar-day.period-inactive .expense-summary,
+.calendar-day.period-inactive .day-actions {
+  opacity: 0.5;
+}
+
+.calendar-day.period-active .day-number {
+  color: #003B5C;
+  font-weight: 600;
+}
+
+.calendar-day.period-active .expense-summary {
+  opacity: 1;
+}
+
+.calendar-day.period-inactive .day-number,
+.calendar-day.period-inactive .expense-summary {
+  opacity: 0.5;
 }
 
 .month-actions {
@@ -1395,91 +1572,53 @@ export default {
   color: #495057;
 }
 
-.month-summary {
-  background: rgba(0, 59, 92, 0.05);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-top: 1.5rem;
-  width: 100%;
-}
-
-.summary-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.summary-item .label {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-
-.summary-item .amount {
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.amount.positive {
-  color: #00B2A9;
-}
-
-.amount.negative {
-  color: #dc3545;
-}
-
-.period-settings {
-  display: flex;
-  gap: 2rem;
-  justify-content: flex-start;
-  align-items: center;
-  margin-top: 1.5rem;
-}
-
-.date-setting {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.setting-label {
-  color: #666;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-
-.date-input {
+.action-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
+  padding: 0.75rem 1.5rem;
+  border: none;
   border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.date-input:hover {
-  background: #e9ecef;
+.income-btn {
+  background-color: #00B2A9;
+  color: white;
 }
 
-.date-input i {
-  color: #6c757d;
-  font-size: 0.9rem;
+.income-btn:hover {
+  background-color: #009b94;
 }
 
-.limit-change {
-  margin-top: 0 !important;
-  padding-left: 0 !important;
+.debts-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.debts-btn:hover {
+  background-color: #c82333;
+}
+
+.bills-btn {
+  background-color: #003B5C;
+  color: white;
+}
+
+.bills-btn:hover {
+  background-color: #002b43;
+}
+
+.savings-btn {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.savings-btn:hover {
+  background-color: #e0a800;
 }
 
 @media (max-width: 768px) {
@@ -1625,179 +1764,6 @@ export default {
   }
 }
 
-.modal-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 9998;
-}
-
-.grid-cell {
-  position: relative;
-  min-height: 120px;
-}
-
-.grid-cell.today {
-  position: relative;
-  border: 2px solid rgba(255, 182, 193, 0.9) !important;
-  box-shadow: 0 2px 12px rgba(255, 182, 193, 0.2);
-  padding: 1rem;
-  min-height: 140px;
-}
-
-.grid-cell.today::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgb(255, 237, 250, 0.5);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.grid-cell.today > * {
-  position: relative;
-  z-index: 1;
-  background: rgb(255, 237, 250, 0.5);
-}
-
-.grid-cell.cutoff-date {
-  background-color: rgba(220, 53, 69, 0.1);
-  border: 2px solid rgba(220, 53, 69, 0.3);
-  box-shadow: 0 2px 12px rgba(220, 53, 69, 0.15);
-}
-
-.grid-cell.period-start {
-  background-color: rgba(0, 178, 169, 0.1);
-  border: 2px solid rgba(0, 178, 169, 0.3);
-  box-shadow: 0 2px 12px rgba(0, 178, 169, 0.15);
-}
-
-.grid-cell.period-active {
-  background-color: rgba(0, 178, 169, 0.05);
-  border: 1px solid rgba(0, 178, 169, 0.2);
-  box-shadow: 0 2px 8px rgba(0, 178, 169, 0.1);
-  opacity: 1;
-}
-
-.grid-cell.period-inactive {
-  background-color: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.grid-cell.period-inactive * {
-  pointer-events: none;
-}
-
-.grid-cell.period-inactive .day-number,
-.grid-cell.period-inactive .expense-summary,
-.grid-cell.period-inactive .day-actions {
-  opacity: 0.5;
-}
-
-.grid-cell.period-active .day-number {
-  color: #003B5C;
-  font-weight: 600;
-}
-
-.grid-cell.period-active .expense-summary {
-  opacity: 1;
-}
-
-.grid-cell.period-inactive .day-number,
-.grid-cell.period-inactive .expense-summary {
-  opacity: 0.5;
-}
-
-/* Uyarı mesajları için yeni stiller */
-.budget-warning {
-  background-color: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
-  padding: 0.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.no-expense-info {
-  background-color: rgba(91, 145, 59, 0.1);
-  color: #5B913B;
-  padding: 0.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.budget-safe {
-  background-color: rgba(239, 176, 54, 0.1);
-  color: #EFB036;
-  padding: 0.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.income-btn {
-  background-color: #00B2A9;
-  color: white;
-}
-
-.income-btn:hover {
-  background-color: #009b94;
-}
-
-.debts-btn {
-  background-color: #dc3545;
-  color: white;
-}
-
-.debts-btn:hover {
-  background-color: #c82333;
-}
-
-.bills-btn {
-  background-color: #003B5C;
-  color: white;
-}
-
-.bills-btn:hover {
-  background-color: #002b43;
-}
-
-.savings-btn {
-  background-color: #ffc107;
-  color: #000;
-}
-
-.savings-btn:hover {
-  background-color: #e0a800;
-}
-
 /* PDF için özel stiller */
 @media print {
   .calendar-grid {
@@ -1929,6 +1895,94 @@ export default {
 .view-btn:hover,
 .add-btn:hover {
   opacity: 1;
+}
+
+.month-summary {
+  background: rgba(0, 59, 92, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  width: 100%;
+}
+
+.summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.summary-item .label {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.summary-item .amount {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.amount.positive {
+  color: #00B2A9;
+}
+
+.amount.negative {
+  color: #dc3545;
+}
+
+.period-settings {
+  display: flex;
+  gap: 2rem;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.date-setting {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.setting-label {
+  color: #666;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.date-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-input:hover {
+  background: #e9ecef;
+}
+
+.date-input i {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.limit-change {
+  margin-top: 0 !important;
+  font-size: 0.85rem;
+  padding-left: 20px;
 }
 
 .summary-item.limit-change {

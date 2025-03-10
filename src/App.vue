@@ -23,7 +23,14 @@
         @show-auth-modal="showAuthModal"
       />
       <main class="content" :class="{ 'sidebar-open': isSidebarOpen }">
-        <router-view></router-view>
+        <router-view v-slot="{ Component }">
+          <keep-alive>
+            <component 
+              :is="Component" 
+              :key="$route.fullPath" 
+            />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
 
@@ -53,7 +60,6 @@ export default {
   },
   setup() {
     const store = useStore()
-    const authInitialized = ref(false)
     const isSidebarOpen = ref(false)
     const authModalVisible = ref(false)
     const authModalMode = ref('login')
@@ -63,20 +69,16 @@ export default {
       
       onAuthStateChanged(auth, async (user) => {
         try {
-          if (user) {
-            await store.dispatch('auth/handleAuthStateChange', user)
+          await store.dispatch('auth/handleAuthStateChange', user)
+          
+          if (!user) {
+            console.log('Kullanıcı oturum açmadı')
+            // Kullanıcı oturum açmamışsa, tüm verileri temizle
           } else {
-            store.commit('auth/CLEAR_USER')
-            store.commit('expenses/CLEAR_EXPENSES')
-            store.commit('income/CLEAR_INCOME')
-            store.commit('bills/CLEAR_BILLS')
-            store.commit('debts/CLEAR_DEBTS')
-            store.commit('savings/CLEAR_SAVINGS')
+            console.log('Kullanıcı oturum açtı, veriler yüklenecek')
           }
         } catch (error) {
           console.error('Auth state handling error:', error)
-        } finally {
-          authInitialized.value = true
         }
       })
     })
@@ -116,7 +118,6 @@ export default {
 
     return {
       isSidebarOpen,
-      authInitialized,
       authModalVisible,
       authModalMode,
       toggleSidebar,

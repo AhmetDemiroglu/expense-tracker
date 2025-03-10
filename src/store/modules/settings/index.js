@@ -1,10 +1,12 @@
 import { expenseAPI } from '@/services/api'
 
+const DEFAULT_CUTOFF_DATE = 25
+
 export default {
   namespaced: true,
   
   state: {
-    cutoffDate: 28 // Varsayılan olarak her ayın 28'i
+    cutoffDate: DEFAULT_CUTOFF_DATE // Varsayılan olarak her ayın 28'i
   },
 
   mutations: {
@@ -14,14 +16,16 @@ export default {
   },
 
   actions: {
+    // Kesim tarihini Firebase'den al
     async fetchCutoffDate({ commit }) {
       try {
-        const date = await expenseAPI.getCutoffDate()
-        commit('SET_CUTOFF_DATE', date)
-        return date
+        const cutoffDate = await expenseAPI.getCutoffDate()
+        commit('SET_CUTOFF_DATE', cutoffDate)
+        return cutoffDate
       } catch (error) {
-        console.error('Kesim tarihi yüklenemedi:', error)
-        throw error
+        // Hata durumunda varsayılan değeri kullan
+        commit('SET_CUTOFF_DATE', DEFAULT_CUTOFF_DATE)
+        return DEFAULT_CUTOFF_DATE
       }
     },
 
@@ -31,7 +35,6 @@ export default {
         commit('SET_CUTOFF_DATE', date)
         return true
       } catch (error) {
-        console.error('Kesim tarihi kaydedilemedi:', error)
         throw error
       }
     },
@@ -42,31 +45,47 @@ export default {
         commit('SET_CUTOFF_DATE', newDate)
         return true
       } catch (error) {
-        console.error('Kesim tarihi güncellenemedi:', error)
         throw error
       }
     }
   },
 
   getters: {
-    // Seçilen ay için başlangıç ve bitiş tarihlerini hesapla
+    // Kesim tarihini al
+    cutoffDate: state => state.cutoffDate,
+    
+    // Kesim tarihine göre ay aralığını hesapla
     getMonthRange: (state) => (year, month) => {
       const cutoffDate = state.cutoffDate
       
-      // Başlangıç: Seçilen ayın 1. günü
-      const startDate = new Date(year, month, 1)
-      startDate.setHours(0, 0, 0, 0)
+      // Ay ve yıl değerlerini sayıya çevir
+      const numericYear = Number(year)
+      const numericMonth = Number(month)
       
-      // Bitiş: Seçilen ayın kesim tarihi veya ayın son günü
-      const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
-      const endDay = Math.min(cutoffDate, lastDayOfMonth)
+      // Kesim günü ayın son gününden büyükse, ayın son gününü kullan
+      const daysInMonth = new Date(numericYear, numericMonth + 1, 0).getDate()
+      const actualCutoffDay = Math.min(cutoffDate, daysInMonth)
       
-      const endDate = new Date(year, month, endDay)
-      endDate.setHours(23, 59, 59, 999)
+      // Dönem başlangıç tarihi (önceki ayın kesim günü + 1)
+      let startDate = new Date(numericYear, numericMonth, 1)
+      if (actualCutoffDay < daysInMonth) {
+        // Eğer kesim günü ayın son gününden küçükse, dönem başlangıcı önceki ayın kesim gününden sonraki gün
+        startDate = new Date(numericYear, numericMonth - 1, actualCutoffDay + 1)
+      } else {
+        // Eğer kesim günü ayın son günüyse, dönem başlangıcı ayın ilk günü
+        startDate = new Date(numericYear, numericMonth, 1)
+      }
+      
+      // Dönem bitiş tarihi (bu ayın kesim günü)
+      const endDate = new Date(numericYear, numericMonth, actualCutoffDay)
+      endDate.setHours(23, 59, 59, 999) // Günün sonuna ayarla
       
       return {
         start: startDate,
-        end: endDate
+        end: endDate,
+        periodStartDate: startDate.toISOString(),
+        cutoffDate: endDate.toISOString(),
+        cutoffDay: actualCutoffDay
       }
     }
   }

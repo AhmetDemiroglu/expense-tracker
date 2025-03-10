@@ -13,7 +13,8 @@ export default {
     isAuthenticated: false,
     isEmailVerified: false,
     authMessage: null,
-    authWarning: null
+    authWarning: null,
+    authInitialized: false
   },
 
   mutations: {
@@ -41,6 +42,9 @@ export default {
     },
     SET_AUTH_WARNING(state, warning) {
       state.authWarning = warning
+    },
+    SET_AUTH_INITIALIZED(state, value) {
+      state.authInitialized = value
     }
   },
 
@@ -233,17 +237,17 @@ export default {
     async handleAuthStateChange({ commit, dispatch }, user) {
       try {
         if (user) {
-          // Kullanıcı bilgilerini yenile
-          await user.reload()
+          // Kullanıcı oturum açmış
           commit('SET_USER', user)
-          
-          // Email doğrulama durumunu kontrol et
-          if (!user.emailVerified) {
-            commit('SET_AUTH_WARNING', 'Lütfen email adresinizi doğrulayın')
-          }
         } else {
+          // Kullanıcı oturum açmamış
           commit('CLEAR_USER')
         }
+        
+        // Auth durumunun başlatıldığını işaretle
+        commit('SET_AUTH_INITIALIZED', true)
+        
+        return user
       } catch (error) {
         console.error('Auth state handling error:', error)
         commit('CLEAR_USER')
@@ -311,10 +315,11 @@ export default {
 
   getters: {
     isAuthenticated: state => state.isAuthenticated,
+    isEmailVerified: state => state.isEmailVerified,
     currentUser: state => state.user,
     userName: state => state.user?.displayName || 'Kullanıcı',
-    isEmailVerified: state => state.isEmailVerified,
     authMessage: state => state.authMessage,
-    authWarning: state => state.authWarning
+    authWarning: state => state.authWarning,
+    isAuthInitialized: state => state.authInitialized
   }
 } 

@@ -74,13 +74,17 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useStore } from 'vuex'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
 
 export default {
   name: 'CalendarView',
   setup() {
+    const store = useStore()
     const currentYear = ref(new Date().getFullYear())
     const selectedMonthDetails = ref(null)
+    const authInitialized = ref(false)
     
     const months = [
       'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
@@ -90,6 +94,91 @@ export default {
     const weekDays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 
     const today = new Date()
+    
+    // Firebase auth listener
+    const unsubscribeAuth = ref(null)
+    
+    // Auth durumunun başlatılmasını bekle
+    const waitForAuth = async () => {
+      if (!store.getters['auth/isAuthInitialized']) {
+        // Auth durumu başlatılana kadar bekle
+        await new Promise(resolve => {
+          const unwatch = store.watch(
+            () => store.getters['auth/isAuthInitialized'],
+            (newValue) => {
+              if (newValue) {
+                unwatch()
+                resolve()
+              }
+            }
+          )
+        })
+      }
+      
+      return store.getters['auth/isAuthenticated']
+    }
+    
+    // Kesim tarihini yükle
+    const loadCutoffDate = async () => {
+      try {
+        // Firebase modüllerini import et
+        const firebaseModule = await import('@/services/firebase')
+        const db = firebaseModule.db
+        const firebaseDB = await import('firebase/database')
+        const ref = firebaseDB.ref
+        const get = firebaseDB.get
+        
+        const auth = getAuth()
+        const user = auth.currentUser
+        if (!user) {
+          return
+        }
+        
+        // Şu anki ay ve yıl
+        const currentMonth = today.getMonth()
+        const currentYear = today.getFullYear()
+        
+        // Ay verilerini al
+        const monthPath = `users/${user.uid}/months/${currentYear}/${currentMonth}`
+        const monthRef = ref(db, monthPath)
+        const snapshot = await get(monthRef)
+        
+        if (snapshot.exists()) {
+          const monthData = snapshot.val()
+          
+          // Eğer kesim tarihi varsa, settings store'u güncelle
+          if (monthData.cutoffDate) {
+            const cutoffDate = new Date(monthData.cutoffDate)
+            const day = cutoffDate.getDate()
+            
+            // Store'u güncelle
+            await store.dispatch('settings/saveCutoffDate', day)
+          }
+        }
+      } catch (error) {
+        console.error('Kesim tarihi yüklenirken hata:', error)
+      }
+    }
+    
+    // Sayfa yüklendiğinde Firebase oturum durumunu dinle
+    onMounted(async () => {
+      // Auth durumunun başlatılmasını bekle
+      const isUserAuthenticated = await waitForAuth()
+      
+      if (isUserAuthenticated) {
+        // Kullanıcı oturum açmışsa kesim tarihini yükle
+        await loadCutoffDate()
+      }
+    })
+    
+    // Component temizleme
+    onBeforeUnmount(() => {
+      // Auth listener'ı temizle
+      if (unsubscribeAuth.value) {
+        unsubscribeAuth.value()
+        unsubscribeAuth.value = null
+      }
+    })
 
     const changeYear = (delta) => {
       currentYear.value += delta
@@ -365,4 +454,4 @@ export default {
     padding: 1rem;
   }
 }
-</style> 
+</style>
